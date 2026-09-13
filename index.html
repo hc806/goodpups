@@ -2322,6 +2322,7 @@
 
     /* Coming back from a Google redirect: adopt the linked uid, then pull
        everything that belongs to it. */
+    var justConnected = false;
     var pending = false;
     try{ pending = sessionStorage.getItem('gp_pending_link') === '1'; }catch(e){}
     if(window.GP_REDIRECT && window.GP_REDIRECT.uid){
@@ -2330,13 +2331,16 @@
         save();
       }
       try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
-      showToast('Connected — progress is safe now');
+      justConnected = true;
     } else if(pending){
       try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
       if(window.GP_ERROR) showToast('Connection did not complete');
     }
 
-    if(cloud) adoptCloudIdentity();
+    if(cloud){
+      if(justConnected) afterConnect();   /* just came back from the Google redirect */
+      else adoptCloudIdentity();
+    }
     updateCloudStatus();
     updateAccountStatus();
   });
@@ -2384,6 +2388,155 @@
   function renderLevelGridIfVisible(){
     var s = document.getElementById('screen-levels');
     if(s && s.classList.contains('active')) renderLevelGrid();
+  }
+
+  /* Runs once a Google account is attached. Pulls that account's card and, if
+     it disagrees with what is on the phone, lets the player decide rather than
+     quietly merging behind their back. */
+  function afterConnect(onDone){
+    if(!cloud){ if(onDone) onDone(); return; }
+    showToast('Connected — checking your saves…');
+    cloud.topScores(50).then(function(docs){
+      var mineDoc = null, id = cloud.uid || (profile && profile.id);
+      for(var i=0;i<docs.length;i++){ if(docs[i].id === id){ mineDoc = docs[i]; break; } }
+      resolveProgressConflict(mineDoc, onDone);
+    }, function(){
+      pushScores();
+      showToast('Connected — progress is safe now');
+      if(onDone) onDone();
+    });
+  }
+
+  /* ---- comparing the two saves ---- */
+  function summarise(levels){
+    var count = 0, stars = 0, best = 0;
+    for(var lv in levels){
+      var e = levels[lv];
+      if(!e) continue;
+      count++;
+      stars += starsForScore(e.score != null ? e.score : e.s || 0);
+      if(+lv > best) best = +lv;
+    }
+    return { count:count, stars:stars, furthest:best };
+  }
+  function localLevels(){
+    var out = {};
+    for(var lv in progress){
+      if(progress[lv] && progress[lv].completed){
+        out[lv] = { score: progress[lv].best || 0, seconds: progress[lv].bestTime || 0,
+                    perfect: !!progress[lv].perfect };
+      }
+    }
+    return out;
+  }
+  function cloudLevelsOf(doc){
+    var out = {};
+    if(!doc || !doc.levels) return out;
+    for(var lv in doc.levels){
+      var e = doc.levels[lv];
+      out[lv] = { score: e.s || 0, seconds: e.t || 0, perfect: !!e.p };
+    }
+    return out;
+  }
+
+  /* Writes a set of levels over the local save, replacing whatever was there. */
+  function adoptLevels(levels){
+    progress = {};
+    for(var lv in levels){
+      var e = levels[lv];
+      progress[lv] = {
+        completed: true,
+        stars: starsForScore(e.score),
+        best: e.score,
+        bestTime: e.seconds || 0,
+        perfect: !!e.perfect
+      };
+    }
+    var lb = readLeaderboard();
+    lb[profile.id] = { name: profile.name, levels: {} };
+    for(var lv2 in levels){
+      lb[profile.id].levels[lv2] = {
+        score: levels[lv2].score, seconds: levels[lv2].seconds || 0,
+        perfect: !!levels[lv2].perfect
+      };
+    }
+    writeLeaderboard(lb);
+    save();
+  }
+
+  function mergeLevels(a, b){
+    var out = {};
+    [a, b].forEach(function(src){
+      for(var lv in src){
+        var e = src[lv], cur = out[lv];
+        if(!cur || e.score > cur.score){
+          out[lv] = { score:e.score, seconds:e.seconds || 0, perfect: !!e.perfect || (cur && cur.perfect) };
+        } else if(cur && e.perfect){ cur.perfect = true; }
+      }
+    });
+    return out;
+  }
+
+  /* Asked only when BOTH sides have progress and they differ. If one side is
+     empty there is nothing to decide, so we just take the other silently -
+     a dialog with an obvious answer is noise. */
+  function resolveProgressConflict(cloudDoc, onDone){
+    var mine = localLevels();
+    var theirs = cloudLevelsOf(cloudDoc);
+    var ms = summarise(mine), ts = summarise(theirs);
+
+    if(ts.count === 0){ pushScores(); if(onDone) onDone(); return; }
+    if(ms.count === 0){ adoptLevels(theirs); pushScores(); refreshPlayButton();
+                        showToast(ts.count + ' levels loaded from your account');
+                        if(onDone) onDone(); return; }
+
+    var same = ms.count === ts.count && ms.stars === ts.stars && ms.furthest === ts.furthest;
+    if(same){ pushScores(); if(onDone) onDone(); return; }
+
+    function card(title, s, note){
+      return '<div style="background:#fff;border:2px solid var(--cream-dark);border-radius:14px;' +
+             'padding:10px 12px;margin-bottom:8px;text-align:left;font-size:13px;">' +
+             '<b>' + title + '</b><br>' +
+             s.count + ' level' + (s.count===1?'':'s') + ' · ★' + s.stars +
+             ' · furthest ' + s.furthest +
+             (note ? '<br><span style="opacity:.7;font-size:11.5px;">' + note + '</span>' : '') +
+             '</div>';
+    }
+
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🔀</div>' +
+      '<h2>Two sets of progress</h2>' +
+      '<p>This phone and your Google account each have a save. Which should GoodPups keep?</p>' +
+      card('On this phone', ms) +
+      card('In your account', ts, escapeHtml(profile.name || '')) +
+      '<button class="btn" id="btn-pc-merge">Combine both</button>' +
+      '<button class="btn secondary" id="btn-pc-local">Keep this phone\'s</button>' +
+      '<button class="btn secondary" id="btn-pc-cloud">Keep my account\'s</button>' +
+      '<p style="font-size:11.5px;opacity:.7;margin-top:4px;">Combining keeps the better result on every level, so nothing is lost.</p>';
+    document.getElementById('overlay').classList.add('active');
+
+    function finish(levels, msg){
+      adoptLevels(levels);
+      pushScores();
+      refreshPlayButton();
+      closeOverlay();
+      showToast(msg);
+      if(onDone) onDone();
+    }
+    document.getElementById('btn-pc-merge').onclick = function(){
+      var m = mergeLevels(mine, theirs);
+      finish(m, 'Combined — ' + summarise(m).count + ' levels');
+    };
+    document.getElementById('btn-pc-local').onclick = function(){
+      if(!confirm('Replace your account\'s save with this phone\'s?\n\nThe ' + ts.count +
+                  ' levels stored in your account will be overwritten.')) return;
+      finish(mine, 'Kept this phone — ' + ms.count + ' levels');
+    };
+    document.getElementById('btn-pc-cloud').onclick = function(){
+      if(!confirm('Replace this phone\'s save with your account\'s?\n\nThe ' + ms.count +
+                  ' levels on this device will be removed.')) return;
+      finish(theirs, 'Loaded your account — ' + ts.count + ' levels');
+    };
   }
 
   function restoreFromCloud(){
@@ -3022,18 +3175,9 @@
       cloud.connectGoogle().then(function(res){
         if(!res) return;
         gBtn.disabled = false;
-        if(res.changed && profile){
-          /* signed into an existing account - adopt that identity, then pull
-             everything that belongs to it */
-          profile.id = res.uid;
-          save();
-        } else if(profile){
-          profile.id = res.uid;
-          save();
-        }
+        if(profile){ profile.id = res.uid; save(); }
         updateAccountStatus();
-        restoreFromCloud();
-        showToast('Connected — progress is safe now');
+        afterConnect();
       }, function(err){
         gBtn.disabled = false;
         var code = (err && err.code) || '';
@@ -4069,10 +4213,8 @@
         if(!res) return;
         if(profile){ profile.id = res.uid; save(); }
         updateAccountStatus();
-        restoreFromCloud();
         closeOverlay();
-        showToast('Connected — progress is safe now');
-        if(onDone) onDone();
+        afterConnect(onDone);
       }, function(err){
         b.disabled = false;
         var code = (err && err.code) || '';
