@@ -639,7 +639,9 @@
       }
     };
   })().catch(function(err){
-    console.warn("GoodPups: cloud unavailable, staying local.", err && err.message);
+    var msg = (err && (err.code || err.message)) ? (err.code || '') + ' ' + (err.message || '') : String(err);
+    window.GP_ERROR = msg;
+    console.warn("GoodPups: cloud unavailable, staying local.", msg);
     return null;
   });
 </script>
@@ -1358,9 +1360,16 @@
     var el = document.getElementById('cloud-status');
     if(!el) return;
     if(!cloudReady){ el.textContent = 'Connecting…'; return; }
-    el.textContent = cloud
-      ? 'Connected — you and your friends share one board.'
-      : 'Offline. Scores are saved on this device only.';
+    if(cloud){
+      el.textContent = 'Connected — you and your friends share one board.';
+      return;
+    }
+    /* Show the real reason rather than a generic message - guessing at a
+       failed connection wastes far more time than printing the error. */
+    var why = window.GP_ERROR ? (' Reason: ' + window.GP_ERROR) : ' (no config, or it failed to load)';
+    el.textContent = 'Offline. Scores stay on this device.' + why;
+    el.style.userSelect = 'text';
+    el.style.webkitUserSelect = 'text';
   }
 
   /* ---- names ---- */
