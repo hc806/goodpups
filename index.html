@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="GoodPups">
+<meta name="theme-color" content="#FFF6E9">
+<meta name="description" content="GoodPups — a logic puzzle. One poodle per row, column and yard.">
+<title>GoodPups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#FFF6E9;
+    --cream-dark:#F0DFC2;
+    --brown-dark:#4A3222;
+    --brown:#8B5E3C;
+    --gold:#E8A33D;
+    --gold-dark:#C97F1F;
+    --white:#FFFFFF;
+    --danger:#D64320;
+    --ad-h:0px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{height:100%; -webkit-text-size-adjust:100%;}
+  body{
+    margin:0; height:100%;
+    background:
+      radial-gradient(circle at 18% 10%, rgba(255,255,255,.6) 0%, transparent 42%),
+      radial-gradient(circle at 50% 0%, var(--cream) 0%, var(--cream-dark) 100%);
+    background-attachment:fixed;
+    font-family:'Nunito',sans-serif;
+    color:var(--brown-dark);
+    display:flex; justify-content:center;
+    min-height:100vh; min-height:100dvh;
+    overflow-x:hidden;
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    overscroll-behavior:none;
+  }
+  h1,h2,h3,button{font-family:'Baloo 2',sans-serif;}
+  button, .cell, .switch{touch-action:manipulation;}
+  .board{touch-action:none;}
+  input, textarea{font-size:16px;}
+
+  #app{
+    width:100%; max-width:480px;
+    min-height:100vh; min-height:100dvh;
+    display:flex; flex-direction:column; position:relative;
+    padding-top:env(safe-area-inset-top);
+  }
+  .screen{
+    display:none; flex-direction:column; align-items:center;
+    padding:20px 20px calc(36px + var(--ad-h) + env(safe-area-inset-bottom));
+    flex:1; animation:fadeIn .26s ease;
+  }
+  .screen.active{display:flex;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(7px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ---------- title ---------- */
+  .hero{position:relative; width:100%; height:150px; margin-top:4px;}
+  .hero-dog{position:absolute; width:112px; height:112px;}
+  .hero-dog.brown{left:calc(50% - 96px); top:22px; transform:rotate(-9deg); animation:bobA 3.4s ease-in-out infinite; z-index:2;}
+  .hero-dog.white{left:calc(50% - 16px); top:14px; transform:rotate(9deg); animation:bobB 3.4s ease-in-out infinite .5s; z-index:1;}
+  @keyframes bobA{0%,100%{transform:translateY(0) rotate(-9deg);} 50%{transform:translateY(-10px) rotate(-4deg);}}
+  @keyframes bobB{0%,100%{transform:translateY(0) rotate(9deg);}  50%{transform:translateY(-10px) rotate(4deg);}}
+
+  .logo{font-size:46px; font-weight:800; margin:2px 0 2px; text-align:center; letter-spacing:.4px;}
+  .logo span{color:var(--gold-dark);}
+  .tagline{font-size:14.5px; color:var(--brown); margin-bottom:24px; text-align:center; line-height:1.5;}
+  #profile-line{display:none; font-size:13.5px; color:var(--brown); margin:-14px 0 16px;}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    -webkit-appearance:none; appearance:none;
+    position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    font-family:'Baloo 2',sans-serif; font-size:19px; font-weight:700;
+    padding:15px 28px; border-radius:19px; border:none; cursor:pointer;
+    background:linear-gradient(180deg,#F2B457 0%, var(--gold) 52%, #DE9528 100%);
+    color:var(--white);
+    text-shadow:0 1.5px 0 rgba(150,90,15,.45);
+    box-shadow:0 6px 0 var(--gold-dark), 0 9px 16px rgba(160,100,20,.28),
+               inset 0 1.5px 0 rgba(255,255,255,.45);
+    margin:0 auto 12px; width:100%; max-width:290px;
+    transition:transform .09s cubic-bezier(.3,1.4,.6,1), box-shadow .09s ease, filter .12s ease;
+  }
+  .btn:active{
+    transform:translateY(5px);
+    box-shadow:0 1px 0 var(--gold-dark), inset 0 1.5px 0 rgba(255,255,255,.3);
+    filter:saturate(1.12);
+  }
+  .btn:focus-visible{outline:3px solid var(--brown-dark); outline-offset:3px;}
+  .btn::after{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(105deg, transparent 35%, rgba(255,255,255,.5) 50%, transparent 65%);
+    transform:translateX(-120%);
+  }
+  .btn:active::after{animation:shine .45s ease;}
+  @keyframes shine{to{transform:translateX(120%);}}
+  .btn.secondary{
+    background:linear-gradient(180deg,#FFFFFF 0%, #FFF9EE 60%, #F7EEDC 100%);
+    color:var(--brown); text-shadow:none;
+    box-shadow:0 5px 0 var(--cream-dark), 0 8px 14px rgba(140,100,60,.15),
+               inset 0 1.5px 0 rgba(255,255,255,.9);
+    font-size:16.5px; padding:13px 24px;
+  }
+  .btn.secondary:active{box-shadow:0 1px 0 var(--cream-dark), inset 0 1.5px 0 rgba(255,255,255,.7);}
+  .btn .sub{display:block; font-size:12.5px; font-weight:600; opacity:.92; font-family:'Nunito',sans-serif;}
+  .btn-icon{width:23px; height:23px; flex-shrink:0;}
+
+  .icon-btn{
+    -webkit-appearance:none; appearance:none;
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1);
+    border:none; width:46px; height:46px; border-radius:15px; font-size:20px;
+    box-shadow:0 4px 0 var(--cream-dark), 0 6px 10px rgba(140,100,60,.13),
+               inset 0 1.5px 0 rgba(255,255,255,.9);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif; color:var(--brown-dark);
+    transition:transform .09s ease, box-shadow .09s ease;
+  }
+  .icon-btn:active{transform:translateY(3px); box-shadow:0 1px 0 var(--cream-dark);}
+  .icon-btn:disabled{opacity:.4;}
+
+  .ctrl-btn{
+    -webkit-appearance:none; appearance:none;
+    flex:1; max-width:135px;
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1); border:none;
+    border-radius:15px; padding:11px 8px;
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14.5px;
+    color:var(--brown-dark);
+    box-shadow:0 4px 0 var(--cream-dark), 0 6px 10px rgba(140,100,60,.12),
+               inset 0 1.5px 0 rgba(255,255,255,.9);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+    transition:transform .09s ease, box-shadow .09s ease, opacity .15s ease;
+  }
+  .ctrl-btn:active{transform:translateY(3px); box-shadow:0 1px 0 var(--cream-dark);}
+  .ctrl-btn:disabled{opacity:.45; box-shadow:0 2px 0 var(--cream-dark);}
+  .ctrl-btn .btn-icon{width:19px; height:19px;}
+  .hint-count{
+    font-family:'Nunito',sans-serif; font-size:11.5px; font-weight:800;
+    background:var(--gold); color:#fff; border-radius:999px;
+    padding:1px 7px; margin-left:1px;
+  }
+  .ctrl-btn:disabled .hint-count{background:var(--brown); opacity:.6;}
+
+  .link-btn{
+    background:none; border:none; color:var(--brown); opacity:.55;
+    font-family:'Nunito',sans-serif; font-size:13px; text-decoration:underline;
+    margin-top:18px; cursor:pointer;
+  }
+
+  /* ---------- panels ---------- */
+  .panel{
+    background:var(--white); border-radius:18px; padding:16px 18px;
+    font-size:14px; line-height:1.6; width:100%; max-width:352px;
+    box-shadow:0 4px 0 var(--cream-dark); text-align:left;
+  }
+  .panel b{color:var(--gold-dark);}
+  .panel ul{margin:6px 0 0; padding-left:20px;}
+  .panel li{margin-bottom:5px;}
+  .demo-x{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:6px;
+    background:linear-gradient(#7FB77E,#6AA46A);
+    color:#fff; font-weight:800; font-size:13px; vertical-align:-5px;
+    font-family:'Baloo 2',sans-serif;
+    box-shadow:inset 0 2px 3px rgba(0,0,0,.28), inset 0 -1px 0 rgba(255,255,255,.35);
+    text-shadow:0 1px 2px rgba(0,0,0,.45);
+  }
+
+  .setting{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:14px; padding:13px 2px; border-bottom:1.5px solid var(--cream-dark);
+  }
+  .setting:last-child{border-bottom:none;}
+  .setting-text{flex:1;}
+  .setting-title{font-weight:800; font-size:15px; font-family:'Baloo 2',sans-serif;}
+  .setting-desc{font-size:12.5px; color:var(--brown); opacity:.82; line-height:1.45; margin-top:2px;}
+  .switch{
+    flex-shrink:0; width:56px; height:32px; border-radius:999px;
+    background:var(--cream-dark); border:none; cursor:pointer;
+    position:relative; transition:background .2s ease;
+    -webkit-appearance:none; appearance:none;
+  }
+  .switch.on{background:var(--gold);}
+  .switch::after{
+    content:''; position:absolute; top:3px; left:3px;
+    width:26px; height:26px; border-radius:50%;
+    background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.2);
+    transition:transform .2s cubic-bezier(.4,1.6,.6,1);
+  }
+  .switch.on::after{transform:translateX(24px);}
+
+  /* ---------- level select ---------- */
+  .topbar{width:100%; display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .screen-title{font-size:23px; font-weight:800;}
+  .scroller{width:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  .band-label{
+    width:100%; font-family:'Baloo 2',sans-serif; font-weight:700;
+    font-size:13.5px; color:var(--brown); opacity:.78;
+    margin:16px 0 8px; display:flex; align-items:center; gap:8px;
+  }
+  .band-label::after{content:''; flex:1; height:2px; background:var(--cream-dark); border-radius:2px;}
+  .level-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:9px; width:100%;}
+  .level-tile{
+    aspect-ratio:1/1; border-radius:14px; border:none;
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1);
+    box-shadow:0 3.5px 0 var(--cream-dark), inset 0 1.5px 0 rgba(255,255,255,.9);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif;
+    font-weight:800; font-size:16px; color:var(--brown-dark); cursor:pointer;
+    -webkit-appearance:none; appearance:none;
+  }
+  .level-tile:active{transform:translateY(3px); box-shadow:0 1px 0 var(--cream-dark);}
+  .level-tile.locked{color:var(--brown); opacity:.4;}
+  .level-tile.current{
+    background:linear-gradient(180deg,#F2B457,var(--gold));
+    color:#fff; box-shadow:0 3.5px 0 var(--gold-dark), inset 0 1.5px 0 rgba(255,255,255,.4);
+  }
+  .level-tile .stars{font-size:8.5px; letter-spacing:.5px; margin-top:1px; color:var(--gold-dark);}
+  .level-tile.current .stars{color:#fff;}
+
+  /* ---------- game ---------- */
+  .game-top{width:100%; display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:8px;}
+  .level-pill{
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1); border-radius:999px; padding:7px 16px;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15.5px;
+    box-shadow:0 3px 0 var(--cream-dark), inset 0 1.5px 0 rgba(255,255,255,.9);
+  }
+  .timer-chip{
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1); border-radius:999px; padding:7px 12px;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:14.5px;
+    box-shadow:0 3px 0 var(--cream-dark), inset 0 1.5px 0 rgba(255,255,255,.9);
+    min-width:58px; text-align:center; font-variant-numeric:tabular-nums;
+  }
+  .status-row{
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px; padding:0 4px; gap:8px;
+  }
+  .status-chip{display:flex; align-items:center; gap:3px; line-height:1; font-size:16px; min-width:0;}
+  .status-chip .label{
+    font-family:'Nunito',sans-serif; font-size:10.5px; font-weight:800;
+    color:var(--brown); opacity:.6; margin-right:4px; letter-spacing:.2px;
+  }
+  .dog-slot{
+    width:19px; height:19px; flex-shrink:0;
+    opacity:.24; filter:grayscale(1);
+    transition:opacity .25s ease, filter .25s ease, transform .25s cubic-bezier(.4,1.6,.6,1);
+  }
+  .dog-slot.filled{opacity:1; filter:none; transform:scale(1.15);}
+  .heart-slot{transition:opacity .3s ease, filter .3s ease, transform .3s ease;}
+  .heart-slot.lost{opacity:.26; filter:grayscale(1); transform:scale(.85);}
+
+  .board-wrap{width:100%; display:flex; justify-content:center; margin-bottom:14px; position:relative;}
+  .board{
+    display:grid; width:min(94vw,420px); aspect-ratio:1/1;
+    border-radius:18px; overflow:hidden;
+    background:#FFFFFF; padding:4px;
+    box-shadow:0 6px 0 var(--cream-dark), 0 12px 26px rgba(74,50,34,.18);
+  }
+  .cell{
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; position:relative; overflow:hidden;
+  }
+  .cell .mark-x{
+    position:absolute; inset:14%;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:26%;
+    background:radial-gradient(circle at 50% 42%, rgba(0,0,0,.30) 0%, rgba(0,0,0,.14) 62%, rgba(0,0,0,.05) 100%);
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.30), inset 0 -1px 0 rgba(255,255,255,.38);
+    animation:xIn .22s cubic-bezier(.34,1.56,.64,1);
+  }
+  .cell .mark-x svg{width:56%; height:56%; display:block;}
+  .cell .x-stroke{
+    stroke:#FFFFFF; stroke-width:16; stroke-linecap:round; fill:none;
+    filter:drop-shadow(0 1.5px 1.5px rgba(0,0,0,.45));
+  }
+  @keyframes xIn{
+    0%{transform:scale(.2) rotate(-35deg); opacity:0;}
+    60%{transform:scale(1.1) rotate(4deg); opacity:1;}
+    100%{transform:scale(1) rotate(0); opacity:1;}
+  }
+  .cell .pup{width:86%; height:86%;}
+  .cell .mark-x, .cell .mark-x *, .cell .pup, .cell .pup *{pointer-events:none;}
+  .cell.pop .pup{animation:pop .42s cubic-bezier(.3,1.7,.5,1);}
+  @keyframes pop{
+    0%{transform:scale(.2) rotate(-25deg);}
+    55%{transform:scale(1.25) rotate(8deg);}
+    75%{transform:scale(.94) rotate(-3deg);}
+    100%{transform:scale(1) rotate(0);}
+  }
+  .cell.shake{animation:shake .4s ease;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    15%{transform:translateX(-5px);} 30%{transform:translateX(5px);}
+    45%{transform:translateX(-4px);} 60%{transform:translateX(4px);}
+    80%{transform:translateX(-2px);}
+  }
+  .cell.flash::before{
+    content:''; position:absolute; inset:0;
+    background:var(--danger); opacity:0; animation:flashFade .45s ease;
+  }
+  @keyframes flashFade{0%{opacity:0;} 30%{opacity:.65;} 100%{opacity:0;}}
+  .cell.glow::after{
+    content:''; position:absolute; inset:0;
+    background:radial-gradient(circle, rgba(255,255,255,.95) 0%, transparent 68%);
+    opacity:0; animation:glowFade .55s ease;
+  }
+  @keyframes glowFade{0%{opacity:0; transform:scale(.4);} 40%{opacity:1;} 100%{opacity:0; transform:scale(1.7);}}
+
+  .fx{position:absolute; pointer-events:none; z-index:5; font-size:17px; will-change:transform,opacity;}
+  @keyframes fxFloat{
+    0%{transform:translate(0,0) scale(.5) rotate(0); opacity:1;}
+    100%{transform:translate(var(--dx),var(--dy)) scale(1.1) rotate(var(--rot)); opacity:0;}
+  }
+
+  .controls-row{display:flex; gap:10px; width:100%; justify-content:center; margin-bottom:8px;}
+  .rules-hint{
+    font-size:12.5px; color:var(--brown); text-align:center;
+    opacity:.72; margin-top:2px; line-height:1.5; max-width:335px;
+  }
+
+  /* ---------- leaderboard ---------- */
+  .lb-tabs{display:flex; gap:8px; width:100%; margin-bottom:12px;}
+  .lb-tab{
+    flex:1; background:linear-gradient(180deg,#FFFFFF,#F8F0E1); border:none; border-radius:13px; padding:10px 6px;
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14px;
+    color:var(--brown); box-shadow:0 3px 0 var(--cream-dark); cursor:pointer;
+    -webkit-appearance:none; appearance:none;
+  }
+  .lb-tab.active{background:linear-gradient(180deg,#F2B457,var(--gold)); color:#fff; box-shadow:0 3px 0 var(--gold-dark);}
+  .lb-row{
+    display:flex; align-items:center; gap:11px;
+    background:var(--white); border-radius:14px; padding:11px 14px;
+    margin-bottom:8px; box-shadow:0 3px 0 var(--cream-dark);
+  }
+  .lb-row.me{background:#FFF0D2; box-shadow:0 3px 0 var(--gold);}
+  .lb-rank{
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px;
+    width:30px; text-align:center; color:var(--brown); flex-shrink:0;
+  }
+  .lb-name{flex:1; font-weight:800; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .lb-meta{font-size:11.5px; color:var(--brown); opacity:.75; font-weight:600; margin-top:1px;}
+  .lb-score{font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px; color:var(--gold-dark); flex-shrink:0;}
+  .lb-empty{text-align:center; color:var(--brown); opacity:.7; font-size:14px; padding:34px 10px; line-height:1.6;}
+
+  /* ---------- modal ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(74,50,34,.58);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+    animation:fadeIn .2s ease;
+  }
+  .overlay.active{display:flex;}
+  .modal{
+    background:var(--cream); border-radius:24px; padding:26px 22px;
+    text-align:center; max-width:335px; width:100%;
+    box-shadow:0 14px 40px rgba(74,50,34,.35);
+    animation:modalIn .35s cubic-bezier(.3,1.5,.5,1);
+    max-height:86vh; overflow-y:auto;
+  }
+  @keyframes modalIn{from{transform:scale(.82) translateY(18px); opacity:0;} to{transform:scale(1) translateY(0); opacity:1;}}
+  .modal .modal-pup{width:92px; height:92px; margin:0 auto;}
+  .modal .emoji{font-size:48px; margin-bottom:4px;}
+  .modal h2{margin:4px 0 6px; font-size:23px;}
+  .modal .stars-big{font-size:30px; letter-spacing:6px; margin-bottom:12px; color:var(--gold-dark);}
+  .modal p{font-size:14px; color:var(--brown); margin:0 0 16px; line-height:1.5;}
+  .modal .panel{box-shadow:none; border:2px solid var(--cream-dark); margin-bottom:14px; max-width:none;}
+  .score-big{font-family:'Baloo 2',sans-serif; font-weight:800; font-size:40px; color:var(--gold-dark); line-height:1; margin:2px 0;}
+  .score-breakdown{
+    background:#fff; border-radius:14px; padding:11px 14px; margin-bottom:14px;
+    font-size:13px; text-align:left; border:2px solid var(--cream-dark);
+  }
+  .score-breakdown div{display:flex; justify-content:space-between; padding:3px 0;}
+  .score-breakdown .minus{color:var(--danger); font-weight:700;}
+  .score-breakdown .total{border-top:2px solid var(--cream-dark); margin-top:5px; padding-top:7px; font-weight:800;}
+
+  /* ---------- ad slot ---------- */
+  #ad-slot{
+    position:fixed; left:0; right:0; bottom:0;
+    height:calc(var(--ad-h) + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);
+    display:none; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.6);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-top:1.5px solid var(--cream-dark);
+    font-size:11px; color:var(--brown); opacity:.6; z-index:30;
+  }
+  body.has-ad #ad-slot{display:flex;}
+
+  .toast{
+    position:fixed; bottom:calc(24px + var(--ad-h)); left:50%; transform:translateX(-50%);
+    background:var(--brown-dark); color:var(--white);
+    padding:10px 20px; border-radius:999px; font-size:13px; font-weight:700;
+    opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:60;
+    max-width:88vw; text-align:center;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section class="screen active" id="screen-title">
+    <div class="hero">
+      <div class="hero-dog brown" id="hero-brown"></div>
+      <div class="hero-dog white" id="hero-white"></div>
+    </div>
+    <div class="logo">Good<span>Pups</span></div>
+    <div class="tagline">One poodle per row, column &amp; yard.<br>Pure logic — never a guess.</div>
+    <div id="profile-line"></div>
+    <button class="btn" id="btn-play"><span id="play-icon"></span><span>Play<span class="sub" id="play-sub">Level 1</span></span></button>
+    <button class="btn secondary" id="btn-levels"><span id="levels-icon"></span>Level Select</button>
+    <button class="btn secondary" id="btn-leaderboard"><span id="lb-icon"></span>Leaderboard</button>
+    <button class="btn secondary" id="btn-settings"><span id="settings-icon"></span>Settings</button>
+    <button class="btn secondary" id="btn-howto"><span id="howto-icon"></span>How to play</button>
+  </section>
+
+  <section class="screen" id="screen-levels">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-title">←</button>
+      <div class="screen-title">Level Select</div>
+      <div style="width:46px;"></div>
+    </div>
+    <div class="scroller" id="level-bands"></div>
+    <button class="link-btn" id="btn-reset-progress">Reset progress</button>
+  </section>
+
+  <section class="screen" id="screen-leaderboard">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-lb">←</button>
+      <div class="screen-title">Leaderboard</div>
+      <div style="width:46px;"></div>
+    </div>
+    <div class="lb-tabs">
+      <button class="lb-tab active" id="tab-total">Total score</button>
+      <button class="lb-tab" id="tab-levels">Best per level</button>
+    </div>
+    <div class="scroller" id="lb-body"></div>
+  </section>
+
+  <section class="screen" id="screen-settings">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-settings">←</button>
+      <div class="screen-title">Settings</div>
+      <div style="width:46px;"></div>
+    </div>
+    <div class="scroller">
+      <div class="panel">
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Auto cross-out</div>
+            <div class="setting-desc">When a poodle lands, mark ✕ on every square it rules out. Off means you mark them yourself.</div>
+          </div>
+          <button class="switch on" id="sw-autocross"></button>
+        </div>
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Sound</div>
+            <div class="setting-desc">Chimes, sweeps and celebration.</div>
+          </div>
+          <button class="switch on" id="sw-sound"></button>
+        </div>
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Vibration</div>
+            <div class="setting-desc" id="haptic-status">Checking…</div>
+          </div>
+          <button class="switch on" id="sw-haptics"></button>
+        </div>
+        <div class="setting">
+          <div class="setting-text"><div class="setting-desc">Feel nothing? Tap Test.</div></div>
+          <button class="ctrl-btn" id="btn-test-buzz" style="max-width:92px; flex:none;">Test</button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Player name</div>
+            <div class="setting-desc" id="current-name">Not set yet</div>
+          </div>
+          <button class="ctrl-btn" id="btn-change-name" style="max-width:92px; flex:none;">Change</button>
+        </div>
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Leaderboard</div>
+            <div class="setting-desc" id="cloud-status">Connecting…</div>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-text">
+            <div class="setting-title">Hints</div>
+            <div class="setting-desc" id="hint-status">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="setting-title" style="margin-bottom:3px;">Saved progress</div>
+        <div class="setting-desc" id="storage-status">Checking…</div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="ctrl-btn" id="btn-backup" style="max-width:none;">Copy backup</button>
+          <button class="ctrl-btn" id="btn-restore" style="max-width:none;">Restore</button>
+        </div>
+        <textarea id="backup-box" readonly style="display:none; width:100%; margin-top:10px; height:74px;
+          font-size:11px; font-family:monospace; border-radius:10px; border:2px solid var(--cream-dark);
+          padding:8px; resize:none; background:#fff; color:var(--brown-dark);"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-howto">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-howto">←</button>
+      <div class="screen-title">How to play</div>
+      <div style="width:46px;"></div>
+    </div>
+    <div class="scroller">
+      <div class="panel">
+        <b>The rules</b>
+        <ul>
+          <li>One poodle in every colored yard.</li>
+          <li>One poodle in every row.</li>
+          <li>One poodle in every column.</li>
+          <li>No two poodles may touch — not even corner to corner.</li>
+        </ul>
+        <br>
+        <b>The controls</b>
+        <ul>
+          <li><b>Tap</b> a square to mark it <span class="demo-x">✕</span> — "no poodle here".</li>
+          <li><b>Tap again</b> to clear the mark.</li>
+          <li><b>Double tap</b> to place a poodle.</li>
+          <li><b>Drag</b> to sweep ✕ across squares. Start on a blank square to add them, start on a ✕ to rub them out.</li>
+        </ul>
+        <br>
+        <b>Good to know</b>
+        <ul>
+          <li>Every puzzle can be finished by reasoning alone. You should never need to guess.</li>
+          <li>A wrong poodle costs one life. You get three.</li>
+          <li>Hints are limited — they refill each day, and every 5 levels cleared earns one back.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-game">
+    <div class="game-top">
+      <button class="icon-btn" id="btn-menu">←</button>
+      <div class="level-pill" id="level-pill">Level 1</div>
+      <div class="timer-chip" id="timer-chip">0:00</div>
+      <button class="icon-btn" id="btn-restart">↻</button>
+    </div>
+    <div class="status-row">
+      <div class="status-chip" id="hearts-display"></div>
+      <div class="status-chip" id="dogs-display"></div>
+    </div>
+    <div class="board-wrap"><div class="board" id="board"></div></div>
+    <div class="controls-row">
+      <button class="ctrl-btn" id="btn-hint"><span id="hint-icon"></span>Hint<span class="hint-count" id="hint-count">5</span></button>
+      <button class="ctrl-btn" id="btn-rules"><span id="rules-icon"></span>Rules</button>
+    </div>
+    <div class="rules-hint">Tap = ✕ &nbsp;·&nbsp; Double tap = poodle &nbsp;·&nbsp; Drag to sweep</div>
+  </section>
+
+</div>
+
+<div id="ad-slot" aria-hidden="true">Ad space</div>
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     FIREBASE (optional). The game is fully playable with this blank.
+     These values are PUBLIC by design and are not a password — your data is
+     protected by firestore.rules, not by hiding them. Never paste a service
+     account key (one containing "private_key") into this file.
+     ============================================================ -->
+<script type="module">
+  const FIREBASE_CONFIG = {
+    apiKey:     "",
+    authDomain: "",
+    projectId:  "",
+    appId:      ""
+  };
+
+  window.GP_BACKEND = (async function(){
+    if(!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId) return null;
+    const V = "https://www.gstatic.com/firebasejs/10.12.0/";
+    const { initializeApp } = await import(V + "firebase-app.js");
+    const { getAuth, signInAnonymously, onAuthStateChanged } = await import(V + "firebase-auth.js");
+    const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection,
+            query, orderBy, limit, getDocs, runTransaction, serverTimestamp }
+      = await import(V + "firebase-firestore.js");
+
+    const app  = initializeApp(FIREBASE_CONFIG);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    const uid = await new Promise((resolve, reject) => {
+      const stop = onAuthStateChanged(auth, u => { if(u){ stop(); resolve(u.uid); } });
+      signInAnonymously(auth).catch(reject);
+      setTimeout(() => reject(new Error("auth timeout")), 12000);
+    });
+
+    return {
+      uid,
+      async isNameFree(key){
+        const snap = await getDoc(doc(db, "usernames", key));
+        return !snap.exists() || snap.data().uid === uid;
+      },
+      async claimName(key, name, oldKey){
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "usernames", key);
+          const snap = await tx.get(ref);
+          if(snap.exists() && snap.data().uid !== uid) throw new Error("taken");
+          tx.set(ref, { uid });
+          tx.set(doc(db, "players", uid), { name, key, updated: serverTimestamp() }, { merge:true });
+        });
+        if(oldKey && oldKey !== key){
+          try{ await deleteDoc(doc(db, "usernames", oldKey)); }catch(e){}
+        }
+      },
+      async putScores(p){
+        await setDoc(doc(db, "scores", uid), {
+          name:p.name, total:p.total, perfect:p.perfect,
+          levels:p.levels, count:p.count, time:p.time, updated: serverTimestamp()
+        });
+      },
+      async topScores(n){
+        const q = query(collection(db, "scores"), orderBy("total","desc"), limit(n || 50));
+        const snap = await getDocs(q);
+        const out = [];
+        snap.forEach(d => out.push(Object.assign({ id:d.id }, d.data())));
+        return out;
+      }
+    };
+  })().catch(function(err){
+    console.warn("GoodPups: cloud unavailable, staying local.", err && err.message);
+    return null;
+  });
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= CONFIG ================= */
+  var TOTAL_LEVELS = 200;
+  var MAX_HEARTS = 3;
+  var DOUBLE_TAP_MS = 500;
+  var STORAGE_KEY = 'goodpups_save_v1';
+
+  var MAX_HINTS       = 5;    // ceiling, and the daily refill amount
+  var LEVELS_PER_HINT = 5;    // clear this many levels, earn one hint back
+
+  var REGION_COLORS = [
+    '#F6C453', '#7FB77E', '#7EC8E3', '#F49097', '#B497D6',
+    '#F2A65A', '#6FC1AE', '#E38B6E', '#9BB7E0'
+  ];
+
+  /* Each entry: "size|regionDigits|solutionColumns".
+     Every puzzle is verified three ways before shipping:
+       1. brute force — exactly one valid solution exists
+       2. deductive solver — reachable by reasoning alone, no guessing
+       3. rule check — the stored answer obeys all four rules
+     Because the data is fixed here, every player sees an identical board:
+     same shape, same colours, same answer. */
+  var PUZZLES = [
+    '5|0000000001020113334433444|24130',
+    '5|0011100012300143444433444|24130',
+    '5|0111100121033443344433334|13042',
+    '5|0000122000330403300033000|41302',
+    '5|0001100002344023400234442|31402',
+    '5|0000011000112231222244222|31420',
+    '5|0000010000111203312233444|20314',
+    '5|0111203322003440044400444|14203',
+    '5|0000001000211132211324444|31402',
+    '5|0001100221332214344444444|02413',
+    '5|0011102221022113333433334|30241',
+    '5|0112211122111331443344443|03142',
+    '5|0011120011222332233344333|42031',
+    '5|0012200222033320033344443|24031',
+    '5|0111200111301113044434444|41302',
+    '5|0011100121033224444244442|30241',
+    '5|0112200222000320003340333|24130',
+    '5|0111100213222332223244222|31420',
+    '5|0000100011000223322234442|41302',
+    '5|0112201121001113344133444|42031',
+    '6|011123012222002222044222444442444455|513024',
+    '6|000012000022300222340552335555335555|425130',
+    '6|000011000011002013000013405033405533|142503',
+    '6|000011220000320000320004335004330000|413520',
+    '6|001112033111333311441111451111555555|503142',
+    '6|001123011223022222022222024525025555|513024',
+    '6|010000000000220000223334223355222555|130524',
+    '6|001121000111011111033144033155335555|402513',
+    '6|011122011222013422004452004444004444|152403',
+    '6|000121000121003111033331333344335344|403152',
+    '6|000111200034200034005333055333055553|305142',
+    '6|012222011122001122304444354544355544|531402',
+    '6|001122001222011111111334111334511334|142530',
+    '6|001222011112001133003333403333405333|531402',
+    '6|000111001122003333044355044555444555|352041',
+    '6|001111020011000003000403054433554433|413520',
+    '6|011111211113211133221144555554555444|024135',
+    '6|001122000222003222000244054444555444|352041',
+    '6|011111012011000011000341503344555444|420351',
+    '6|001222001112000002003444033434553333|531420',
+    '6|001122011122111113141433144443544443|142530',
+    '6|011222011222011122003442004445044444|140253',
+    '6|011222001222001112333112443155333155|314205',
+    '6|000000001023002223444222444222445555|025314',
+    '6|011232012222012222044252045555044455|413052',
+    '6|000011002021002221342255333555335555|253140',
+    '6|001111021213022233222222222442225552|305142',
+    '6|011122001122003224033224033244533334|314250',
+    '6|001002000022030022033422533444553334|253140',
+    '6|001221011111001111003111044415444415|304251',
+    '6|000121031111031111331111331144335544|403152',
+    '6|000011000011230311233341333445333444|140253',
+    '6|000001000011022211032311033334055544|041352',
+    '6|000001000222330002430022445522455552|520413',
+    '6|000112000122032222033322453333455333|415302',
+    '6|000111223111223311422221422221422251|153024',
+    '6|000111000121000221034422033455033455|304251',
+    '6|000122031111331111333111333334555554|403152',
+    '6|001123021223222223222244225444225544|305142',
+    '6|010022010022000022000032445532445555|152403',
+    '7|0100000000000000022330222243552424455544445555446|1352046',
+    '7|0001234011122411112241515524555554455555445566554|5042613',
+    '7|0001112000312204422250042225444452544445554466555|5304162',
+    '7|0000001200001120000132204015264441566645556655555|2063514',
+    '7|0111111022211100021110033311403331140333154663555|5314062',
+    '7|0001222300222233322223322242335554635555663555566|3140526',
+    '7|0000112000001130000013440011445555544455664445666|6205314',
+    '7|0011121301111133111113331411333141135344663555466|5130462',
+    '7|0111111000111120311112333144553116455314445555544|4203516',
+    '7|0011122011111300041134404415444455566455556665555|5362041',
+    '7|0000111020011100000310000334555003355500335666333|4136052',
+    '7|0011112000111300013330441333544433354443335564333|6415302',
+    '7|0000112000011100011113301111300411150046115566611|6251304',
+    '7|0000000000010002331304233333443355344335534435566|2413506',
+    '7|0001211000111103041513304551366445536664443336444|4163520',
+    '7|0001223001112300111230441133041144454444445546666|1526403',
+    '7|0000000110000233000024344056444465644446664466666|3061524',
+    '7|0111111211131122113332213333222334522633452263344|0314625',
+    '7|0001111000213100221334433335444433344443664444666|3026415',
+    '7|0000000100000213000023304042334444455554465555466|3061425',
+    '7|0001222000123300012334033333443533344355534444566|5130246',
+    '7|0011111200111123333114333566444556644555664555666|5203146',
+    '7|0000111001111122211132444111444451144444664444666|1360425',
+    '7|0011111221111123314142334444333444433335663666666|1305246',
+    '7|0011123000122200022220044522605555560055550055555|6352041',
+    '7|0111112003311203331223343115334411564441154444455|4153602',
+    '7|0001121000112100111113341115335555566655556666655|5142063',
+    '7|0012200300020030002003330000344005044444604444466|2403516',
+    '7|0000012300001140000114401111455515544455554446665|6025314',
+    '7|0000012000001130000013344111334445566445556444555|6205314',
+    '7|0000122000012300001134550111445551144551114456611|5164203',
+    '7|0011122011112200131224445552444455244445554466555|4036152',
+    '7|0001222000111130000013000445000044400604440066644|5306142',
+    '7|0012222301122233222223332222433425244444664444466|0241536',
+    '7|0011223001142301114440151444005544455556445566666|4620513',
+    '7|0112223001122344122234442225466225544622254466555|0361425',
+    '7|0111233011111304411130441113444413344455534444466|4206135',
+    '7|0011222001222341111224111222444455544644554465555|1635024',
+    '7|0112333111233312223331222233422255344466554444665|0263514',
+    '7|0000111211111133111443335544333334433366663366666|3024615',
+    '7|0000112000111133011114411111441151544615554466665|6204153',
+    '7|0000111000012300002234055233444555544555554466655|5146302',
+    '7|0000012003001100334115333311333311133366113336611|6140253',
+    '7|0000122000012100031110003341055334405666446666644|6403152',
+    '7|0000011000021100222334002536400555640446664446666|1625304',
+    '7|0001122000122203312423333444333334533344456333444|2531640',
+    '7|0000012300001230011120000414000044400506645555644|6031524',
+    '7|0011122111122211122221113422554442255444665544666|0253146',
+    '7|0001233000133300114330001443511144651166665116666|4615203',
+    '7|0000000000112300011230011222041552264455226645522|2635140',
+    '8|0000122200002223000003334000333350063333500333335033337755533377|46203571',
+    '8|0111111100211111002211134222133352255333555553675555566655555666|41305726',
+    '8|0112334401133344111333441333355411333544113335561777355517777755|30641752',
+    '8|0000111120031111440311114444441144441111444451164455557744555577|20315746',
+    '8|0000122230404222334445523344452233455552664555526645555766665557|41360572',
+    '8|0001112200011324000115240005554406555554665554446666644476664444|75314620',
+    '8|0000111100001123004022220044422255546252554462525555555255577555|57164203',
+    '8|0000112340401133444441335444111354444663544476665547776655447777|61742530',
+    '8|0000011200300142003044420534444233343222333332223333672233366666|60417253',
+    '8|0001112200003222003332240033324456663444777633447773344473333444|52640317',
+    '8|0011234401112445001524450015225511155555111555551611557716655577|50641372',
+    '8|0001123300001334001113340001334401111144015616445556664457776664|50637241',
+    '8|0000011102001111322211114225111144255166422555564475555644775555|46027513',
+    '8|0000122200001122000011223001112430011155336166557761665677666666|52470613',
+    '8|0000001120000013200001112204411122251111222561117226661177266611|27046351',
+    '8|0111203301111043001100440000004450000444560004445507777755077777|47263150',
+    '8|0001023304000233444002334540333355553333555633375556663755666633|30526174',
+    '8|0001111100002313042023135422231355526333555267775577777755777777|26137405',
+    '8|0011222200011122000333230044333300443333054443665544433677444666|64253170',
+    '8|0011233400112244001122450006624500066665700766557777555577775555|52463170',
+    '8|0001112200003322000033320000032200043356000435557704455574444555|36417502',
+    '8|0001112130111111301111113311111133111144355551643557766455577766|61407253',
+    '8|0000111102011111022111112223111422255414222554442666555466667754|06137425',
+    '8|0000112200001322000113330044533304444333064443330644733366677733|57042613',
+    '8|0001112300001123011111134111133345443333444466334466667344444677|26351407',
+    '8|0001111203441111034411113334411133566111555766115555661155556611|70641352',
+    '8|0000000000000100200031112200333342433333444456674445566755555677|15042637',
+    '8|0000122200003242503332445533444455334444666664446667774466677744|47130625',
+    '8|0000111200000111000011330044553300445663744466667444666677466666|75164203',
+    '8|0000000000000001222000112222003345266633456663334477663377776333|57261403',
+    '8|0000011233401111344411114444551164445555644475556647757766677777|73062514',
+    '8|0111111201334442033342220005422250555222555555265555555655555577|14205736',
+    '8|0000012300000223000022230000022240500222444602224666622247777222|57362041',
+    '8|0001222200112333441123334411533344611333446663334767673347777777|60241375',
+    '8|0111112211111132441133335444333355556633555566335557633355777333|07315264',
+    '8|0001122300011222011112224111111241516222455572225557722255577722|71304625',
+    '8|0000012200000112000000223300004253600442566004425666666256676666|57416203',
+    '8|0011112200111223011114225111142251116444556664445566777756677777|17360524',
+    '8|0000122300101233001012334411133354411333545566335555573355555733|60731425',
+    '8|0112233311123333111223334155233341453333444533334446667744666777|02463157',
+    '8|0010222200003324503333445033334453333346533377765553666655666666|26173504',
+    '8|0000001100211013002211132224533322444333244444336444443366447773|16247305',
+    '8|0012223300122232002242220004422200544622055446225554444754444444|26305174',
+    '8|0111111111111122111111223311112233334442353344465535566655557776|02614735',
+    '8|0000111100002131000422330004222200000055600000557777005577770055|46352071',
+    '8|0111122231321222333222224333222244333325644333756644477566447775|04637251',
+    '8|0000111100011111000011120333114253366442533366725337777755337777|13726405',
+    '8|0000122200001133000011130044411344444433445555335556757755567777|51470263',
+    '8|0001111201111222011312220333132204433356003335560335555603377755|02631574',
+    '8|0000012200222122000222223022222233332424553624445556664755666777|25307146',
+    '9|000121111000111111000013311000013111000044516700044666774444466877444466777444466|475168302',
+    '9|011111122001342222000042222005442222505544226555552222555557222555577788555577778|130486275',
+    '9|000000111000000001000201111345555111445555511445555556444755586444755588777775888|613058274',
+    '9|011222222111122222111122223111142233115533333655553733655555588665555558665555588|052486317',
+    '9|011111222111111122313111144333314444333554444333354466333366666333366676333866666|081642573',
+    '9|000111223000001224500101244551111444555611114556666114556666614777666666778666666|864751302',
+    '9|011122223111222223111422255114445555164444445666445555664447555666477888666677888|084137526',
+    '9|000011222000002233004042333444042353444446553444466555454555555755555558755555888|461825307',
+    '9|001223333002222333442252333444255333444443333444663337444663333444663333466666888|203518647',
+    '9|000001233440001233441111553411111333411111133444111333444661333788666333777666633|637581420',
+    '9|001122233001422223000422233550222263557227666557777766557777777555777777555777887|203847516',
+    '9|001111233001111133001411535011441555614441557664441777644447777668447777688447777|684071352',
+    '9|000001223044041222444441222444441252464455552664555555666655555766688555766688855|837526140',
+    '9|011111223004111222044444222044444522444444522644475552664475555665555558665555588|836024157',
+    '9|000000000000000122000003122000003122440333111455533666455577666858866666888666666|368502471',
+    '9|000000122000111122000331114000351116000556666000556666000766666870766666877777666|758314602',
+    '9|000012222000022233000442233004444233004553333006653333076663333776688833766688883|461538207',
+    '9|000111222001121222011122222031322222433333222443333522466355577666335587666355588|415306827',
+    '9|011123333411122223441522222444525222444555222444555666447755666447755566488885666|082615374',
+    '9|000111112000013314000033334000034444000033354060033554077555554077758888077555888|840751362',
+    '9|011222333111222434111224444551122444551122244666162244666662224777777244777777844|072514836',
+    '9|001222334000223334002222344552262334555263333555733333555773333555573388555573338|205846371',
+    '9|000112222000122222001122223000444453000046553780000055788805555788805555788855555|468352071',
+    '9|000112232000142222000044222000004422000444455000444555004446655777846665788888885|736148502',
+    '9|000011123000011113040414413040444433544444436544444446555476666855466666888886666|752830461',
+    '9|011112222111111222111111222331111452333116452336116472836166677886667777888667777|083726415',
+    '9|000000011000020011000223344000555544000655555000666555000666555708666888778888888|746851302',
+    '9|001111123000141133051144333051444433556444434576644434577644444777648888777788888|750813624',
+    '9|000001111000000011200301111223333144223334444223333445226677775228777775228777777|170468352',
+    '9|000122333002222333002222234222222554622275544622777444227777444777777784777777788|317250648',
+    '9|011111122011333424001333444000333344533333346533376666553777666555776666855576666|571836420',
+    '9|000011123000002223000004225000004255000044555000044445066666455778666455788666655|486175302',
+    '9|011112222311212445331222445333333345363337355666677755666687558666887858666888888|024738516',
+    '9|011112222011111333001111113044414113044414153644444555444474585447477585447777888|531820647',
+    '9|000000122000011123000444422000000422506004472556074477557777777588877777558877777|681752403',
+    '9|000012333000022333402223333400222333440222533444262553464667755466667755866667777|428517360',
+    '9|000011112000011111000031111000331111004311111554461166557461668557766688577766688|851420637',
+    '9|000112223000112222000111442000014422000114442500014444556078447566678777556677777|863170524',
+    '9|000122223000114233000014233001114453006114443006114444066644444777444444777774888|481735206',
+    '9|000012222000002222000000223000042233404043333444443536444555556447775556847775555|461728530'
+  ];
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(ch){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+  }
+
+  /* ================= POODLE ARTWORK =================
+     Two coats. Both are the same drawing with a different palette, so they
+     read as littermates rather than two unrelated characters. */
+  var COATS = {
+    brown: { top:'#B07E52', mid:'#96683F', low:'#7B5433',
+             earTop:'#8A5F39', earLow:'#63421F', curl:'#9A6C43',
+             cheek:'#A57249', muzzle:'#C89B6E', brow:'#6B4A2B', line:'#3A2415' },
+    white: { top:'#FFFFFF', mid:'#F3EADC', low:'#DFD1BC',
+             earTop:'#F7EFE3', earLow:'#D8C9B2', curl:'#FFFFFF',
+             cheek:'#F6EDDF', muzzle:'#FFFBF4', brow:'#C6B69D', line:'#4A3A28' }
+  };
+
+  function poodleSVG(coatName, uid){
+    var k = COATS[coatName] || COATS.brown;
+    var id = (coatName || 'b') + (uid || '');
+    return '' +
+    '<svg class="pup" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+      '<defs>' +
+        '<radialGradient id="f' + id + '" cx="42%" cy="34%" r="68%">' +
+          '<stop offset="0%" stop-color="' + k.top + '"/>' +
+          '<stop offset="62%" stop-color="' + k.mid + '"/>' +
+          '<stop offset="100%" stop-color="' + k.low + '"/>' +
+        '</radialGradient>' +
+        '<radialGradient id="e' + id + '" cx="45%" cy="30%" r="72%">' +
+          '<stop offset="0%" stop-color="' + k.earTop + '"/>' +
+          '<stop offset="100%" stop-color="' + k.earLow + '"/>' +
+        '</radialGradient>' +
+      '</defs>' +
+      '<circle cx="38" cy="17" r="11" fill="url(#e' + id + ')"/>' +
+      '<circle cx="52" cy="13" r="12" fill="url(#e' + id + ')"/>' +
+      '<circle cx="64" cy="19" r="10" fill="url(#e' + id + ')"/>' +
+      '<circle cx="47" cy="10" r="8"  fill="' + k.curl + '" opacity=".55"/>' +
+      '<ellipse cx="17" cy="52" rx="14" ry="20" fill="url(#e' + id + ')" transform="rotate(-13 17 52)"/>' +
+      '<circle cx="14" cy="63" r="10" fill="url(#e' + id + ')"/>' +
+      '<circle cx="20" cy="41" r="9"  fill="' + k.earTop + '"/>' +
+      '<ellipse cx="83" cy="52" rx="14" ry="20" fill="url(#e' + id + ')" transform="rotate(13 83 52)"/>' +
+      '<circle cx="86" cy="63" r="10" fill="url(#e' + id + ')"/>' +
+      '<circle cx="80" cy="41" r="9"  fill="' + k.earTop + '"/>' +
+      '<ellipse cx="50" cy="52" rx="31" ry="29" fill="url(#f' + id + ')"/>' +
+      '<circle cx="27" cy="62" r="10" fill="' + k.cheek + '" opacity=".75"/>' +
+      '<circle cx="73" cy="62" r="10" fill="' + k.cheek + '" opacity=".75"/>' +
+      '<ellipse cx="50" cy="66" rx="17" ry="13" fill="' + k.muzzle + '"/>' +
+      '<ellipse cx="50" cy="60" rx="7.5" ry="5.8" fill="' + k.line + '"/>' +
+      '<ellipse cx="47.5" cy="58" rx="2.4" ry="1.6" fill="#6B4A31" opacity=".8"/>' +
+      '<path d="M50 65 v5" stroke="' + k.line + '" stroke-width="2.4" stroke-linecap="round"/>' +
+      '<path d="M50 70 q-6 6 -11 1" stroke="' + k.line + '" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M50 70 q6 6 11 1"  stroke="' + k.line + '" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+      '<ellipse cx="37" cy="45" rx="6.2" ry="6.8" fill="#2A1A0E"/>' +
+      '<ellipse cx="63" cy="45" rx="6.2" ry="6.8" fill="#2A1A0E"/>' +
+      '<circle cx="39.2" cy="42.6" r="2.5" fill="#fff"/>' +
+      '<circle cx="65.2" cy="42.6" r="2.5" fill="#fff"/>' +
+      '<circle cx="35.4" cy="47.4" r="1.2" fill="#fff" opacity=".72"/>' +
+      '<circle cx="61.4" cy="47.4" r="1.2" fill="#fff" opacity=".72"/>' +
+      '<path d="M31 35 q6 -3.5 12 -0.5" stroke="' + k.brow + '" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+      '<path d="M57 34.5 q6 -3 12 0.5" stroke="' + k.brow + '" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+    '</svg>';
+  }
+
+  var PUP_BROWN = poodleSVG('brown','g');
+  var PUP_WHITE = poodleSVG('white','g');
+
+  /* Which coat appears where is derived from the level and row, never from
+     Math.random. Two players on level 47 see the same pups in the same
+     squares - the mix stays varied without the board differing per person. */
+  function coatFor(levelNum, r, c){
+    var hash = (levelNum * 2654435761 + r * 40503 + c * 12345) >>> 0;
+    return ((hash >>> 7) & 1) ? PUP_WHITE : PUP_BROWN;
+  }
+
+  var X_MARK_HTML =
+    '<span class="mark-x">' +
+      '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+        '<path class="x-stroke" d="M26 26 L74 74"/>' +
+        '<path class="x-stroke" d="M74 26 L26 74"/>' +
+      '</svg>' +
+    '</span>';
+
+  var ICONS = {
+    play:'<svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 4.6v14.8a1 1 0 0 0 1.53.85l11.2-7.4a1 1 0 0 0 0-1.7L8.53 3.75A1 1 0 0 0 7 4.6z" fill="#fff" opacity=".95"/></svg>',
+    grid:'<svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="2.6" y="2.6" width="8" height="8" rx="2" fill="#8B5E3C"/><rect x="13.4" y="2.6" width="8" height="8" rx="2" fill="#C49A6C"/><rect x="2.6" y="13.4" width="8" height="8" rx="2" fill="#C49A6C"/><rect x="13.4" y="13.4" width="8" height="8" rx="2" fill="#8B5E3C"/></svg>',
+    podium:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.2 2.6h5.6l-.7 3.1 2.3-.6-1.9 3.3H8.5L6.6 5.1l2.3.6z" fill="#FFD65C" stroke="#B8860B" stroke-width="1.1" stroke-linejoin="round"/><rect x="9" y="9.6" width="6" height="12" rx="1.1" fill="#FFD65C" stroke="#B8860B" stroke-width="1.2"/><rect x="2.5" y="13.6" width="6.5" height="8" rx="1.1" fill="#E7E2D6" stroke="#9C8F78" stroke-width="1.2"/><rect x="15" y="15.6" width="6.5" height="6" rx="1.1" fill="#E0A97B" stroke="#9C6B45" stroke-width="1.2"/></svg>',
+    gear:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3.4" stroke="#8B5E3C" stroke-width="1.8"/><path d="M19.3 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.8 1.8 0 1 1 2.6-2.6l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.8 1.8 0 1 1 3.6 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.4.9z" stroke="#8B5E3C" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    book:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.8A1.8 1.8 0 0 1 4.8 3H9a3 3 0 0 1 3 3v13a2.2 2.2 0 0 0-2.2-2.2H4.8A1.8 1.8 0 0 1 3 16z" fill="#FFF3DE" stroke="#8B5E3C" stroke-width="1.5" stroke-linejoin="round"/><path d="M21 4.8A1.8 1.8 0 0 0 19.2 3H15a3 3 0 0 0-3 3v13a2.2 2.2 0 0 1 2.2-2.2h5A1.8 1.8 0 0 0 21 16z" fill="#FFE9C4" stroke="#8B5E3C" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    bulb:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 18h6M10 21h4" stroke="#8B5E3C" stroke-width="1.8" stroke-linecap="round"/><path d="M12 2.6a6.6 6.6 0 0 0-3.8 12 2.6 2.6 0 0 1 1 1.8v.6h5.6v-.6a2.6 2.6 0 0 1 1-1.8A6.6 6.6 0 0 0 12 2.6z" fill="#FFE08A" stroke="#C9891B" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+  };
+
+  /* Home-screen icon: both poodles side by side, drawn as a data-URI SVG so
+     saving to the home screen shows the pair rather than a blank page glyph. */
+  function installAppIcon(){
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">' +
+        '<rect width="180" height="180" rx="40" fill="#FFF1DC"/>' +
+        '<g transform="translate(8,44) scale(0.92)">' + poodleSVG('brown','i1') + '</g>' +
+        '<g transform="translate(78,44) scale(0.92)">' + poodleSVG('white','i2') + '</g>' +
+      '</svg>';
+    var href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    [['icon',''],['apple-touch-icon','']].forEach(function(pair){
+      var link = document.createElement('link');
+      link.rel = pair[0];
+      link.href = href;
+      document.head.appendChild(link);
+    });
+  }
+  installAppIcon();
+
+  /* ================= AUDIO ================= */
+  var audioCtx = null, masterGain = null, reverbSend = null, unlocked = false;
+
+  function ac(){
+    if(!settings || !settings.sound) return null;
+    if(!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      try{ audioCtx = new AC(); }catch(e){ return null; }
+      buildAudioChain();
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function buildAudioChain(){
+    var ctx = audioCtx;
+    masterGain = ctx.createGain();
+    masterGain.gain.value = 0.9;
+    var comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.5;
+    comp.attack.value = 0.004; comp.release.value = 0.22;
+    var shelf = ctx.createBiquadFilter();
+    shelf.type = 'highshelf'; shelf.frequency.value = 6200; shelf.gain.value = -5;
+    var convolver = ctx.createConvolver();
+    convolver.buffer = makeImpulse(1.7, 2.6);
+    reverbSend = ctx.createGain();
+    reverbSend.gain.value = 0.26;
+    masterGain.connect(shelf); shelf.connect(comp); comp.connect(ctx.destination);
+    reverbSend.connect(convolver); convolver.connect(comp);
+  }
+
+  function makeImpulse(seconds, decay){
+    var rate = audioCtx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    var buf = audioCtx.createBuffer(2, len, rate);
+    for(var ch=0; ch<2; ch++){
+      var d = buf.getChannelData(ch);
+      for(var i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+    }
+    return buf;
+  }
+
+  function note(o){
+    var ctx = ac(); if(!ctx) return;
+    var t0 = ctx.currentTime + (o.at || 0);
+    var freq = o.freq, dur = o.dur || 0.4;
+    var vol = o.vol == null ? 0.22 : o.vol;
+    var voice = ctx.createGain(); voice.gain.value = 0;
+    var filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.min(freq*6+900, 12000), t0);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(freq*1.6, 220), t0+dur);
+    filter.Q.value = 0.8;
+    [0, o.detune == null ? 6 : o.detune].forEach(function(cents, i){
+      var osc = ctx.createOscillator();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      osc.detune.setValueAtTime(cents, t0);
+      if(o.glide) osc.frequency.exponentialRampToValueAtTime(o.glide, t0 + dur*0.9);
+      var g = ctx.createGain(); g.gain.value = i === 0 ? 1 : 0.45;
+      osc.connect(g); g.connect(filter);
+      osc.start(t0); osc.stop(t0 + dur + 0.08);
+    });
+    if(o.shimmer !== false){
+      var hi = ctx.createOscillator();
+      hi.type='sine'; hi.frequency.setValueAtTime(freq*2.98, t0);
+      var hg = ctx.createGain();
+      hg.gain.setValueAtTime(0.0001, t0);
+      hg.gain.exponentialRampToValueAtTime(vol*0.16, t0+0.008);
+      hg.gain.exponentialRampToValueAtTime(0.0001, t0+dur*0.35);
+      hi.connect(hg); hg.connect(filter);
+      hi.start(t0); hi.stop(t0+dur);
+    }
+    var attack = o.attack == null ? 0.006 : o.attack;
+    voice.gain.setValueAtTime(0.0001, t0);
+    voice.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+    voice.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    filter.connect(voice); voice.connect(masterGain);
+    if(reverbSend) voice.connect(reverbSend);
+  }
+
+  function noise(o){
+    var ctx = ac(); if(!ctx) return;
+    var t0 = ctx.currentTime + (o.at || 0), dur = o.dur || 0.2;
+    var src = ctx.createBufferSource();
+    var len = Math.floor(ctx.sampleRate * dur);
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var d = buf.getChannelData(0);
+    for(var i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1 - i/len);
+    src.buffer = buf;
+    var f = ctx.createBiquadFilter();
+    f.type = o.filter || 'bandpass';
+    f.frequency.setValueAtTime(o.freq || 900, t0);
+    if(o.glide) f.frequency.exponentialRampToValueAtTime(o.glide, t0+dur);
+    f.Q.value = o.q == null ? 1.2 : o.q;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(o.vol || 0.1, t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    src.connect(f); f.connect(g); g.connect(masterGain);
+    if(reverbSend) g.connect(reverbSend);
+    src.start(t0); src.stop(t0+dur+0.02);
+  }
+
+  var PENT = [523.25,587.33,698.46,783.99,932.33,1046.50,1174.66,1396.91,1567.98,1864.66];
+
+  var SFX = {
+    mark:   function(){ note({freq:659.25, dur:0.20, vol:0.13, attack:0.003}); },
+    unmark: function(){ note({freq:392.00, dur:0.16, vol:0.10, attack:0.003, shimmer:false}); },
+    sweep:  function(i){ note({freq:PENT[Math.min(i,PENT.length-1)], dur:0.17, vol:0.10, attack:0.002, shimmer:false}); },
+    sweepDown: function(i){
+      var idx = Math.max(0, PENT.length-1-Math.min(i,PENT.length-1));
+      note({freq:PENT[idx]*0.5, dur:0.15, vol:0.085, attack:0.002, shimmer:false});
+    },
+    correct: function(){
+      note({freq:523.25, dur:0.55, vol:0.17});
+      note({freq:659.25, dur:0.60, vol:0.14, at:0.035});
+      note({freq:783.99, dur:0.75, vol:0.12, at:0.07});
+      noise({freq:2600, glide:5200, dur:0.28, vol:0.035, q:0.8, at:0.01});
+    },
+    wrong: function(){
+      note({freq:311.13, dur:0.42, vol:0.15, type:'triangle', glide:233.08, shimmer:false});
+      note({freq:155.56, dur:0.50, vol:0.11, at:0.05, shimmer:false});
+      noise({freq:420, glide:180, dur:0.3, vol:0.05, filter:'lowpass', at:0.02});
+    },
+    win: function(){
+      [523.25,659.25,783.99,1046.50].forEach(function(f,i){
+        note({freq:f, dur:0.7, vol:0.17, at:i*0.115});
+      });
+      note({freq:1318.51, dur:1.3, vol:0.13, at:0.49});
+      note({freq:1567.98, dur:1.5, vol:0.09, at:0.53});
+      noise({freq:3400, glide:7000, dur:0.7, vol:0.03, at:0.46, q:0.6});
+    },
+    lose: function(){
+      [523.25,440.00,349.23].forEach(function(f,i){
+        note({freq:f, dur:0.85, vol:0.14, type:'triangle', at:i*0.19, shimmer:false});
+      });
+    },
+    tap: function(){ note({freq:880, dur:0.13, vol:0.09, attack:0.002, shimmer:false}); }
+  };
+
+  function unlockAudio(){
+    if(unlocked) return;
+    unlocked = true;
+    var ctx = ac(); if(!ctx) return;
+    var s = ctx.createBufferSource();
+    s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    s.connect(ctx.destination); s.start(0);
+  }
+  document.addEventListener('touchend', unlockAudio, {once:true, passive:true});
+  document.addEventListener('click', unlockAudio, {once:true});
+
+  /* ================= HAPTICS =================
+     Real vibration only. No audio substitute: a fake buzz is worse than none,
+     because it teaches you to expect feedback the device isn't giving.
+     Chrome on Android refuses navigator.vibrate without user activation, and
+     does NOT count touchstart or pointerdown as activation - only a click.
+     That is why the buzz is wired to click and to completed taps. */
+  var HAPTICS_SUPPORTED = typeof navigator !== 'undefined' && !!navigator.vibrate;
+  var hapticsArmed = false, lastBuzzOk = null;
+
+  function buzz(pattern){
+    if(!settings || !settings.haptics || !HAPTICS_SUPPORTED) return;
+    try{ lastBuzzOk = navigator.vibrate(pattern); }
+    catch(e){ lastBuzzOk = false; }
+  }
+
+  var HAPTIC = {
+    button:  function(){ buzz(12); },
+    mark:    function(){ buzz(14); },
+    unmark:  function(){ buzz(9);  },
+    sweep:   function(){ buzz(9);  },   /* fired per square, never throttled */
+    correct: function(){ buzz(22); },
+    wrong:   function(){ buzz([45,55,45]); },
+    win:     function(){ buzz([28,55,28,55,70]); },
+    lose:    function(){ buzz([90,70,90]); },
+    toggle:  function(){ buzz(16); }
+  };
+
+  document.addEventListener('pointerdown', function(e){
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if(!b || b.classList.contains('switch')) return;
+    SFX.tap();
+  }, true);
+
+  document.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if(!b) return;
+    hapticsArmed = true;
+    HAPTIC.button();
+  }, true);
+
+  /* ================= SAVE DATA ================= */
+  var progress, settings, profile, activeRun, hints;
+
+  var STORAGE_OK = (function(){
+    try{
+      localStorage.setItem('__gps__','1');
+      var ok = localStorage.getItem('__gps__') === '1';
+      localStorage.removeItem('__gps__');
+      return ok;
+    }catch(e){ return false; }
+  })();
+  var memoryStore = null;
+
+  function readRaw(){
+    if(STORAGE_OK){ try{ return localStorage.getItem(STORAGE_KEY); }catch(e){ return null; } }
+    return memoryStore;
+  }
+  function writeRaw(str){
+    if(STORAGE_OK){ try{ localStorage.setItem(STORAGE_KEY, str); return true; }catch(e){} }
+    memoryStore = str; return STORAGE_OK;
+  }
+
+  function todayKey(){
+    var d = new Date();
+    return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+  }
+
+  function applyData(data){
+    if(!data) data = {};
+    progress  = data.progress  || {};
+    profile   = data.profile   || null;
+    activeRun = data.activeRun || null;
+    var s = data.settings || {};
+    settings = {
+      autoCross: typeof s.autoCross === 'boolean' ? s.autoCross : true,
+      sound:     typeof s.sound     === 'boolean' ? s.sound     : true,
+      haptics:   typeof s.haptics   === 'boolean' ? s.haptics   : true
+    };
+    var hv = data.hints || {};
+    hints = {
+      left: typeof hv.left === 'number' ? hv.left : MAX_HINTS,
+      day:  hv.day || todayKey(),
+      sinceEarned: hv.sinceEarned || 0
+    };
+    refillHintsIfNewDay();
+  }
+
+  function load(){
+    var data = null;
+    try{ var raw = readRaw(); if(raw) data = JSON.parse(raw); }catch(e){}
+    applyData(data);
+  }
+  function save(){
+    writeRaw(JSON.stringify({
+      progress:progress, settings:settings, profile:profile,
+      activeRun:activeRun, hints:hints
+    }));
+  }
+
+  /* ---- hint economy ----
+     Five to start. Every calendar day resets you to five. Clearing five
+     levels hands one back, so a player who never opens the app again for a
+     week is not stuck, and a player grinding levels is not starved either. */
+  function refillHintsIfNewDay(){
+    var t = todayKey();
+    if(hints.day !== t){
+      hints.day = t;
+      hints.left = MAX_HINTS;
+      return true;
+    }
+    return false;
+  }
+  function spendHint(){
+    if(hints.left <= 0) return false;
+    hints.left--; save(); updateHintUI(); return true;
+  }
+  function earnHintForLevel(){
+    hints.sinceEarned = (hints.sinceEarned || 0) + 1;
+    var earned = false;
+    while(hints.sinceEarned >= LEVELS_PER_HINT){
+      hints.sinceEarned -= LEVELS_PER_HINT;
+      if(hints.left < MAX_HINTS){ hints.left++; earned = true; }
+    }
+    save();
+    return earned;
+  }
+  function updateHintUI(){
+    refillHintsIfNewDay();
+    var btn = document.getElementById('btn-hint');
+    var badge = document.getElementById('hint-count');
+    if(badge) badge.textContent = hints.left;
+    if(btn) btn.disabled = hints.left <= 0;
+    var st = document.getElementById('hint-status');
+    if(st){
+      var toNext = LEVELS_PER_HINT - (hints.sinceEarned || 0);
+      st.textContent = hints.left + ' of ' + MAX_HINTS + ' left. ' +
+        (hints.left >= MAX_HINTS
+          ? 'Full.'
+          : toNext + ' more level' + (toNext===1?'':'s') + ' earns one back, or they refill tomorrow.');
+    }
+  }
+
+  load();
+
+  function exportCode(){
+    var payload = JSON.stringify({v:2, progress:progress, settings:settings, profile:profile, hints:hints});
+    try{ return btoa(unescape(encodeURIComponent(payload))); }catch(e){ return payload; }
+  }
+  function importCode(code){
+    code = (code||'').trim();
+    if(!code) return false;
+    var text = code;
+    try{ text = decodeURIComponent(escape(atob(code))); }catch(e){}
+    var data; try{ data = JSON.parse(text); }catch(e){ return false; }
+    if(!data || typeof data !== 'object' || !data.progress) return false;
+    applyData(data); save(); return true;
+  }
+
+  function getPuzzle(levelNum){
+    var parts = PUZZLES[levelNum-1].split('|');
+    var n = parseInt(parts[0],10), rs = parts[1], ss = parts[2];
+    var regionOf = [], solution = [];
+    for(var r=0;r<n;r++){
+      var row = [];
+      for(var c=0;c<n;c++) row.push(parseInt(rs.charAt(r*n+c),10));
+      regionOf.push(row);
+      solution.push(parseInt(ss.charAt(r),10));
+    }
+    return {n:n, regionOf:regionOf, solution:solution};
+  }
+  function sizeOfLevel(lv){ return parseInt(PUZZLES[lv-1].split('|')[0],10); }
+
+  function maxUnlockedLevel(){
+    var max = 1;
+    for(var key in progress){
+      var lv = parseInt(key,10);
+      if(progress[key] && progress[key].completed && lv+1 > max) max = lv+1;
+    }
+    return Math.min(max, TOTAL_LEVELS);
+  }
+  function resumeLevel(){
+    for(var lv=1; lv<=TOTAL_LEVELS; lv++){
+      if(!progress[lv] || !progress[lv].completed) return lv;
+    }
+    return TOTAL_LEVELS;
+  }
+
+  /* ================= SCORING ================= */
+  var SCORE_MAX = 1000, PENALTY_MISTAKE = 150, PENALTY_HINT = 120,
+      PENALTY_ATTEMPT = 80, ATTEMPT_CAP = 400, SCORE_FLOOR = 100;
+
+  function computeScore(o){
+    var retries = Math.max(0, o.attempts - 1);
+    var mp = o.mistakes * PENALTY_MISTAKE;
+    var hp = o.hints * PENALTY_HINT;
+    var ap = Math.min(retries * PENALTY_ATTEMPT, ATTEMPT_CAP);
+    return {
+      score: Math.max(SCORE_FLOOR, SCORE_MAX - mp - hp - ap),
+      mistakePenalty:mp, hintPenalty:hp, attemptPenalty:ap,
+      mistakes_label: o.mistakes + (o.mistakes===1?' mistake':' mistakes'),
+      hints_label:    o.hints    + (o.hints===1?' hint':' hints'),
+      retries_label:  retries    + (retries===1?' retry':' retries'),
+      perfect: (o.mistakes===0 && o.hints===0 && retries===0)
+    };
+  }
+  function starsForScore(s){ return s >= 1000 ? 3 : s >= 700 ? 2 : 1; }
+  function formatTime(sec){
+    var m = Math.floor(sec/60), s = Math.floor(sec%60);
+    return m + ':' + (s<10?'0':'') + s;
+  }
+
+  /* ================= BACKEND ================= */
+  var cloud = null, cloudReady = false;
+  (window.GP_BACKEND || Promise.resolve(null)).then(function(b){
+    cloud = b; cloudReady = true;
+    if(cloud) pushScores();
+    updateCloudStatus();
+  });
+
+  function updateCloudStatus(){
+    var el = document.getElementById('cloud-status');
+    if(!el) return;
+    if(!cloudReady){ el.textContent = 'Connecting…'; return; }
+    el.textContent = cloud
+      ? 'Connected — you and your friends share one board.'
+      : 'Offline. Scores are saved on this device only.';
+  }
+
+  /* ---- names ---- */
+  var NAME_REGISTRY_KEY = 'goodpups_names_v1', NAME_MIN = 3, NAME_MAX = 14;
+  var memoryNames = {};
+
+  function normalizeName(n){ return (n||'').toLowerCase().replace(/[\s_]+/g,''); }
+  function readRegistry(){
+    if(!STORAGE_OK) return memoryNames;
+    try{ var raw = localStorage.getItem(NAME_REGISTRY_KEY); return raw ? JSON.parse(raw) : {}; }
+    catch(e){ return memoryNames; }
+  }
+  function writeRegistry(reg){
+    memoryNames = reg;
+    if(!STORAGE_OK) return;
+    try{ localStorage.setItem(NAME_REGISTRY_KEY, JSON.stringify(reg)); }catch(e){}
+  }
+  function validateName(name){
+    var t = (name||'').trim().replace(/\s+/g,' ');
+    if(t.length < NAME_MIN) return {ok:false, reason:'Names need at least ' + NAME_MIN + ' letters.'};
+    if(t.length > NAME_MAX) return {ok:false, reason:'Names can be at most ' + NAME_MAX + ' letters.'};
+    if(!/^[A-Za-z0-9 _-]+$/.test(t)) return {ok:false, reason:'Letters, numbers, spaces and dashes only.'};
+    if(!/[A-Za-z]/.test(t)) return {ok:false, reason:'Pop at least one letter in there.'};
+    return {ok:true, name:t};
+  }
+  function localNameCheck(key){
+    var reg = readRegistry(), taken = reg[key], mine = profile && profile.id;
+    return { available: !taken || taken === mine, key:key };
+  }
+  function checkNameAvailable(name){
+    var key = normalizeName(name);
+    if(cloud){
+      return cloud.isNameFree(key).then(
+        function(free){ return {available:free, key:key}; },
+        function(){ return localNameCheck(key); });
+    }
+    return Promise.resolve(localNameCheck(key));
+  }
+  function claimName(name, key){
+    var reg = readRegistry(), oldKey = profile && profile.key;
+    var id = (cloud && cloud.uid) || (profile && profile.id) ||
+             ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2,7));
+    if(oldKey && oldKey !== key) delete reg[oldKey];
+    reg[key] = id;
+    writeRegistry(reg);
+    profile = {id:id, name:name, key:key, created:(profile && profile.created) || Date.now()};
+    save();
+    syncLeaderboardName();
+    if(cloud){
+      cloud.claimName(key, name, oldKey).then(pushScores, function(){
+        showToast('Saved here — cloud will catch up');
+      });
+    }
+  }
+
+  /* ---- leaderboard store ---- */
+  var LB_KEY = 'goodpups_leaderboard_v1', memLB = {};
+  function readLeaderboard(){
+    if(!STORAGE_OK) return memLB;
+    try{ var raw = localStorage.getItem(LB_KEY); return raw ? JSON.parse(raw) : {}; }
+    catch(e){ return memLB; }
+  }
+  function writeLeaderboard(lb){
+    memLB = lb;
+    if(!STORAGE_OK) return;
+    try{ localStorage.setItem(LB_KEY, JSON.stringify(lb)); }catch(e){}
+  }
+  function syncLeaderboardName(){
+    if(!profile || !profile.id) return;
+    var lb = readLeaderboard();
+    if(lb[profile.id]){ lb[profile.id].name = profile.name; writeLeaderboard(lb); }
+  }
+  function submitScore(lv, score, seconds, perfect){
+    if(!profile || !profile.id) return;
+    var lb = readLeaderboard();
+    var me = lb[profile.id] || {name:profile.name, levels:{}};
+    me.name = profile.name;
+    var prev = me.levels[lv];
+    if(!prev || score > prev.score || (score === prev.score && seconds < prev.seconds)){
+      me.levels[lv] = {score:score, seconds:seconds, perfect:!!perfect};
+    } else if(perfect && prev){ prev.perfect = true; }
+    lb[profile.id] = me;
+    writeLeaderboard(lb);
+    pushScores();
+  }
+  function pushScores(){
+    if(!cloud || !profile || !profile.name) return;
+    var lb = readLeaderboard(), me = lb[profile.id];
+    if(!me) return;
+    var total=0, perfect=0, count=0, time=0, levels={};
+    for(var lv in me.levels){
+      var e = me.levels[lv];
+      total += e.score; time += e.seconds;
+      if(e.perfect) perfect++;
+      count++;
+      levels[lv] = {s:e.score, t:e.seconds, p:!!e.perfect};
+    }
+    cloud.putScores({name:profile.name, total:total, perfect:perfect,
+                     count:count, time:time, levels:levels}).catch(function(){});
+  }
+  function sortRows(a,b){
+    return (b.total - a.total) || (b.perfect - a.perfect) ||
+           (b.levels - a.levels) || (a.time - b.time);
+  }
+  function localLeaderboard(){
+    var lb = readLeaderboard(), rows = [];
+    for(var id in lb){
+      var e = lb[id], total=0, count=0, time=0, perfect=0;
+      for(var lv in e.levels){
+        total += e.levels[lv].score; time += e.levels[lv].seconds;
+        if(e.levels[lv].perfect) perfect++;
+        count++;
+      }
+      rows.push({id:id, name:e.name, total:total, levels:count,
+                 time:time, perfect:perfect, detail:e.levels});
+    }
+    rows.sort(sortRows);
+    return rows;
+  }
+  function fetchLeaderboard(){
+    if(cloud){
+      return cloud.topScores(50).then(function(docs){
+        var rows = docs.map(function(d){
+          var detail = {};
+          for(var lv in (d.levels||{})){
+            detail[lv] = {score:d.levels[lv].s, seconds:d.levels[lv].t, perfect:d.levels[lv].p};
+          }
+          return {id:d.id, name:d.name||'Pup', total:d.total||0, levels:d.count||0,
+                  time:d.time||0, perfect:d.perfect||0, detail:detail};
+        });
+        rows.sort(sortRows);
+        return rows;
+      }, localLeaderboard);
+    }
+    return Promise.resolve(localLeaderboard());
+  }
+
+  /* ================= RUN PERSISTENCE ================= */
+  function snapshotRun(){
+    if(!puzzle || gameOver) return;
+    activeRun = {
+      level: currentLevel,
+      board: board.map(function(r){ return r.join(''); }).join(','),
+      hearts: hearts, mistakes: mistakeCount, hints: hintCount,
+      attempts: attemptCount, elapsed: elapsedSec
+    };
+    save();
+  }
+  function clearRun(){ if(activeRun){ activeRun = null; save(); } }
+  function restoreRun(lv){
+    if(!activeRun || activeRun.level !== lv) return null;
+    var rows = String(activeRun.board).split(','), n = sizeOfLevel(lv);
+    if(rows.length !== n) return null;
+    var grid = [];
+    for(var r=0;r<n;r++){
+      if(rows[r].length !== n) return null;
+      var row = [];
+      for(var c=0;c<n;c++){
+        var v = parseInt(rows[r].charAt(c),10);
+        row.push(v===1||v===2 ? v : 0);
+      }
+      grid.push(row);
+    }
+    return {
+      board:grid,
+      hearts:Math.max(0, Math.min(MAX_HEARTS, activeRun.hearts|0)),
+      mistakes:Math.max(0, activeRun.mistakes|0),
+      hints:Math.max(0, activeRun.hints|0),
+      attempts:Math.max(1, activeRun.attempts|0),
+      elapsed:Math.max(0, activeRun.elapsed|0)
+    };
+  }
+  window.addEventListener('pagehide', snapshotRun);
+  window.addEventListener('beforeunload', snapshotRun);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden') snapshotRun();
+  });
+  window.addEventListener('resize', function(){ if(puzzle) measureBoard(); });
+  window.addEventListener('orientationchange', function(){
+    setTimeout(function(){ if(puzzle) measureBoard(); }, 250);
+  });
+
+  /* ================= STATE ================= */
+  var currentLevel = 1, puzzle = null, board = null;
+  var hearts = MAX_HEARTS, gameOver = false;
+  var mistakeCount = 0, hintCount = 0, attemptCount = 1;
+  var levelStart = 0, timerInterval = null, elapsedSec = 0;
+  var lastAttemptedLevel = null, runDirty = false;
+
+  function showScreen(id){
+    var list = document.querySelectorAll('.screen');
+    for(var i=0;i<list.length;i++) list[i].classList.remove('active');
+    document.getElementById(id).classList.add('active');
+  }
+  function refreshPlayButton(){
+    var lv = (activeRun && activeRun.level) ? activeRun.level : resumeLevel();
+    document.getElementById('play-sub').textContent =
+      'Level ' + lv + (activeRun && activeRun.level === lv ? ' · resume' : '');
+  }
+  function refreshProfileUI(){
+    var el = document.getElementById('profile-line');
+    if(profile && profile.name){
+      el.innerHTML = 'Playing as <b>' + escapeHtml(profile.name) + '</b>';
+      el.style.display = 'block';
+    } else { el.style.display = 'none'; }
+    var n = document.getElementById('current-name');
+    if(n) n.textContent = (profile && profile.name) ? profile.name : 'Not set yet';
+  }
+
+  document.getElementById('hero-brown').innerHTML = poodleSVG('brown','h1');
+  document.getElementById('hero-white').innerHTML = poodleSVG('white','h2');
+  (function(){
+    var map = {'play-icon':ICONS.play, 'levels-icon':ICONS.grid, 'lb-icon':ICONS.podium,
+               'settings-icon':ICONS.gear, 'howto-icon':ICONS.book,
+               'hint-icon':ICONS.bulb, 'rules-icon':ICONS.book};
+    for(var id in map){ var el = document.getElementById(id); if(el) el.innerHTML = map[id]; }
+  })();
+
+  /* ---- nav ---- */
+  document.getElementById('btn-play').onclick = function(){
+    var lv = (activeRun && activeRun.level) ? activeRun.level : resumeLevel();
+    startLevel(lv); showScreen('screen-game');
+  };
+  document.getElementById('btn-levels').onclick = function(){ renderLevelGrid(); showScreen('screen-levels'); };
+  document.getElementById('btn-leaderboard').onclick = function(){ lbMode='total'; renderLeaderboard(); showScreen('screen-leaderboard'); };
+  document.getElementById('btn-settings').onclick = function(){
+    updateCloudStatus(); diagnoseHaptics(); updateHintUI(); showScreen('screen-settings');
+  };
+  document.getElementById('btn-howto').onclick = function(){ showScreen('screen-howto'); };
+  document.getElementById('btn-back-title').onclick    = function(){ refreshPlayButton(); showScreen('screen-title'); };
+  document.getElementById('btn-back-lb').onclick       = function(){ showScreen('screen-title'); };
+  document.getElementById('btn-back-settings').onclick = function(){ showScreen('screen-title'); };
+  document.getElementById('btn-back-howto').onclick    = function(){ showScreen('screen-title'); };
+  document.getElementById('btn-menu').onclick = function(){
+    snapshotRun(); refreshPlayButton(); showScreen('screen-title');
+  };
+  document.getElementById('btn-restart').onclick = function(){
+    if(!gameOver && (countPlaced() > 0 || hearts < MAX_HEARTS)) attemptCount++;
+    var keep = attemptCount;
+    clearRun();
+    attemptCount = keep; lastAttemptedLevel = currentLevel;
+    startLevel(currentLevel, true);
+  };
+  document.getElementById('btn-hint').onclick  = giveHint;
+  document.getElementById('btn-rules').onclick = showRules;
+  document.getElementById('btn-reset-progress').onclick = function(){
+    if(confirm('Reset all level progress?')){
+      progress = {}; activeRun = null; lastAttemptedLevel = null;
+      save(); renderLevelGrid(); refreshPlayButton();
+    }
+  };
+  document.getElementById('tab-total').onclick  = function(){ lbMode='total';  renderLeaderboard(); };
+  document.getElementById('tab-levels').onclick = function(){ lbMode='levels'; renderLeaderboard(); };
+
+  function wireSwitch(id, key){
+    var el = document.getElementById(id);
+    function paint(){ el.classList.toggle('on', !!settings[key]); }
+    paint();
+    el.onclick = function(){
+      settings[key] = !settings[key];
+      paint(); save();
+      if(key === 'sound' && settings.sound) SFX.tap();
+      if(key === 'haptics'){ HAPTIC.toggle(); diagnoseHaptics(); }
+    };
+  }
+
+  function diagnoseHaptics(){
+    var el = document.getElementById('haptic-status');
+    if(!el) return;
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var isFirefox = /Firefox|FxiOS/i.test(ua);
+    if(isIOS){
+      el.textContent = 'iPhone blocks vibration for web pages. Works only in the app version.';
+    } else if(isFirefox){
+      el.textContent = 'Firefox dropped vibration in v129. Chrome on this phone will buzz.';
+    } else if(!HAPTICS_SUPPORTED){
+      el.textContent = 'This browser has no vibration support.';
+    } else if(!settings.haptics){
+      el.textContent = 'Turned off.';
+    } else if(lastBuzzOk === false){
+      el.textContent = 'Phone is refusing it — almost always Do Not Disturb or silent mode. A web page cannot override that.';
+    } else {
+      el.textContent = 'On. If it goes quiet, check Do Not Disturb.';
+    }
+  }
+
+  wireSwitch('sw-autocross','autoCross');
+  wireSwitch('sw-sound','sound');
+  wireSwitch('sw-haptics','haptics');
+
+  (function(){
+    document.getElementById('storage-status').textContent = STORAGE_OK
+      ? 'Saving automatically on this device.'
+      : "This browser won't save from a local file. Progress lasts only while open — host it online, or use a backup code.";
+
+    document.getElementById('btn-test-buzz').onclick = function(){
+      diagnoseHaptics();
+      if(!HAPTICS_SUPPORTED){ showToast('Vibration not available here'); return; }
+      var ok = false;
+      try{ ok = navigator.vibrate([60,40,60,40,120]); }catch(e){}
+      lastBuzzOk = ok; diagnoseHaptics();
+      showToast(ok ? 'Buzzed — feel that?' : 'Phone refused (check Do Not Disturb)');
+    };
+
+    var box = document.getElementById('backup-box');
+    document.getElementById('btn-backup').onclick = function(){
+      var code = exportCode();
+      box.value = code; box.style.display = 'block'; box.select();
+      var copied = false;
+      try{ copied = document.execCommand('copy'); }catch(e){}
+      if(!copied && navigator.clipboard){
+        navigator.clipboard.writeText(code).then(
+          function(){ showToast('Backup code copied'); },
+          function(){ showToast('Code shown below — copy it'); });
+        return;
+      }
+      showToast(copied ? 'Backup code copied' : 'Code shown below — copy it');
+    };
+    document.getElementById('btn-restore').onclick = function(){
+      var code = prompt('Paste your backup code:');
+      if(code === null) return;
+      if(importCode(code)){
+        renderLevelGrid(); refreshPlayButton(); refreshProfileUI(); updateHintUI();
+        wireSwitch('sw-autocross','autoCross');
+        wireSwitch('sw-sound','sound');
+        wireSwitch('sw-haptics','haptics');
+        showToast('Progress restored');
+      } else { showToast("That code didn't look right"); }
+    };
+    document.getElementById('btn-change-name').onclick = function(){
+      showNameSetup(function(){ refreshProfileUI(); });
+    };
+  })();
+
+  /* ================= LEVEL SELECT ================= */
+  function renderLevelGrid(){
+    var wrap = document.getElementById('level-bands');
+    wrap.innerHTML = '';
+    var unlocked = maxUnlockedLevel(), resume = resumeLevel();
+    var lastSize = null, grid = null;
+    for(var lv=1; lv<=TOTAL_LEVELS; lv++){
+      var size = sizeOfLevel(lv);
+      if(size !== lastSize){
+        var label = document.createElement('div');
+        label.className = 'band-label';
+        label.textContent = size + '×' + size + ' · ' + size + ' colours';
+        wrap.appendChild(label);
+        grid = document.createElement('div');
+        grid.className = 'level-grid';
+        wrap.appendChild(grid);
+        lastSize = size;
+      }
+      (function(lv, grid){
+        var tile = document.createElement('button');
+        var cls = 'level-tile';
+        if(lv > unlocked) cls += ' locked';
+        else if(lv === resume) cls += ' current';
+        tile.className = cls;
+        var e = progress[lv];
+        if(lv > unlocked){ tile.innerHTML = '🔒'; }
+        else {
+          var stars = (e && e.stars)
+            ? new Array(e.stars+1).join('★') + new Array(MAX_HEARTS-e.stars+1).join('☆') : '';
+          tile.innerHTML = lv + (stars ? '<div class="stars">'+stars+'</div>' : '');
+          tile.onclick = function(){ startLevel(lv); showScreen('screen-game'); };
+        }
+        grid.appendChild(tile);
+      })(lv, grid);
+    }
+  }
+
+  /* ================= LEADERBOARD SCREEN ================= */
+  var lbMode = 'total';
+  function renderLeaderboard(){
+    document.getElementById('tab-total').classList.toggle('active', lbMode==='total');
+    document.getElementById('tab-levels').classList.toggle('active', lbMode==='levels');
+    var body = document.getElementById('lb-body');
+    body.innerHTML = '<div class="lb-empty">Loading…</div>';
+    fetchLeaderboard().then(function(rows){
+      if(!rows.length){
+        body.innerHTML = '<div class="lb-empty">No scores yet.<br>Finish a level to get on the board!' +
+          (profile ? '' : '<br><br>Pick a player name in Settings so your runs are saved.') + '</div>';
+        return;
+      }
+      var myId = profile && profile.id, html = '';
+      if(lbMode === 'total'){
+        rows.forEach(function(row, i){
+          var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+          html += '<div class="lb-row' + (row.id===myId?' me':'') + '">' +
+            '<div class="lb-rank">' + medal + '</div>' +
+            '<div style="flex:1; min-width:0;">' +
+              '<div class="lb-name">' + escapeHtml(row.name) + '</div>' +
+              '<div class="lb-meta">' + row.levels + ' level' + (row.levels===1?'':'s') +
+                (row.perfect ? ' · ' + row.perfect + ' flawless ⭐' : '') + '</div>' +
+            '</div>' +
+            '<div class="lb-score">' + row.total + '</div></div>';
+        });
+      } else {
+        var best = {};
+        rows.forEach(function(row){
+          for(var lv in row.detail){
+            var e = row.detail[lv];
+            if(!best[lv] || e.score > best[lv].score ||
+              (e.score === best[lv].score && e.seconds < best[lv].seconds)){
+              best[lv] = {score:e.score, seconds:e.seconds, name:row.name, id:row.id};
+            }
+          }
+        });
+        var lvs = Object.keys(best).map(Number).sort(function(a,b){ return a-b; });
+        if(!lvs.length){ body.innerHTML = '<div class="lb-empty">No level scores yet.</div>'; return; }
+        lvs.forEach(function(lv){
+          var e = best[lv];
+          html += '<div class="lb-row' + (e.id===myId?' me':'') + '">' +
+            '<div class="lb-rank">' + lv + '</div>' +
+            '<div style="flex:1; min-width:0;">' +
+              '<div class="lb-name">' + escapeHtml(e.name) + '</div>' +
+              '<div class="lb-meta">' + formatTime(e.seconds) + '</div>' +
+            '</div>' +
+            '<div class="lb-score">' + e.score + '</div></div>';
+        });
+      }
+      body.innerHTML = html;
+    });
+  }
+
+  /* ================= GAME ================= */
+  function startLevel(lv, fresh){
+    currentLevel = lv;
+    puzzle = getPuzzle(lv);
+    var resumed = fresh ? null : restoreRun(lv);
+    if(resumed){
+      board = resumed.board; hearts = resumed.hearts;
+      mistakeCount = resumed.mistakes; hintCount = resumed.hints;
+      attemptCount = resumed.attempts; lastAttemptedLevel = lv;
+    } else {
+      board = [];
+      for(var r=0;r<puzzle.n;r++) board.push(new Array(puzzle.n).fill(0));
+      hearts = MAX_HEARTS; mistakeCount = 0; hintCount = 0;
+      if(lv !== lastAttemptedLevel){ attemptCount = 1; lastAttemptedLevel = lv; }
+      var rec = progress[lv];
+      if(rec && rec.completed) attemptCount = 1;
+      clearRun();
+    }
+    gameOver = false;
+    lastTapKey = null; lastTapTime = 0;
+    document.getElementById('level-pill').textContent = 'Level ' + lv;
+    updateHearts(); renderBoard(); updateDogCounter(); updateHintUI();
+    startTimer(resumed ? resumed.elapsed : 0);
+    if(resumed && (resumed.hearts < MAX_HEARTS || countPlaced() > 0)){
+      showToast('Picking up where you left off');
+    }
+  }
+
+  function startTimer(from){
+    stopTimer();
+    var base = from || 0;
+    levelStart = Date.now() - base*1000;
+    elapsedSec = base;
+    paintTimer();
+    timerInterval = setInterval(function(){
+      elapsedSec = Math.floor((Date.now()-levelStart)/1000);
+      paintTimer();
+    }, 500);
+  }
+  function stopTimer(){ if(timerInterval){ clearInterval(timerInterval); timerInterval = null; } }
+  function paintTimer(){ document.getElementById('timer-chip').textContent = formatTime(elapsedSec); }
+
+  function updateHearts(){
+    var html = '<span class="label">Lives</span>';
+    for(var i=0;i<MAX_HEARTS;i++){
+      html += '<span class="heart-slot' + (i<hearts?'':' lost') + '">❤️</span>';
+    }
+    document.getElementById('hearts-display').innerHTML = html;
+  }
+  function updateDogCounter(){
+    var placed = countPlaced();
+    var html = '<span class="label">Pups</span>';
+    for(var i=0;i<puzzle.n;i++){
+      html += '<span class="dog-slot' + (i<placed?' filled':'') + '">' + PUP_BROWN + '</span>';
+    }
+    document.getElementById('dogs-display').innerHTML = html;
+  }
+
+  var toastTimer = null;
+  function showToast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1600);
+  }
+
+  function renderBoard(){
+    var n = puzzle.n, boardEl = document.getElementById('board');
+    boardEl.style.gridTemplateColumns = 'repeat('+n+', 1fr)';
+    boardEl.style.gridTemplateRows = 'repeat('+n+', 1fr)';
+    boardEl.innerHTML = '';
+    var thick = '3.5px solid #FFFFFF', thin = '1.5px solid rgba(255,255,255,0.45)';
+    for(var r=0;r<n;r++){
+      for(var c=0;c<n;c++){
+        var cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r; cell.dataset.c = c;
+        var reg = puzzle.regionOf[r][c];
+        cell.style.background = REGION_COLORS[reg % REGION_COLORS.length];
+        cell.style.borderTop    = (r===0   || puzzle.regionOf[r-1][c]!==reg) ? thick : thin;
+        cell.style.borderLeft   = (c===0   || puzzle.regionOf[r][c-1]!==reg) ? thick : thin;
+        cell.style.borderRight  = (c===n-1 || puzzle.regionOf[r][c+1]!==reg) ? thick : thin;
+        cell.style.borderBottom = (r===n-1 || puzzle.regionOf[r+1][c]!==reg) ? thick : thin;
+        renderCellContent(cell, r, c);
+        boardEl.appendChild(cell);
+      }
+    }
+    attachBoardInput(boardEl);
+    measureBoard();
+  }
+  function renderCellContent(cell, r, c){
+    var v = board[r][c];
+    if(v===1) cell.innerHTML = coatFor(currentLevel, r, c);
+    else if(v===2) cell.innerHTML = X_MARK_HTML;
+    else cell.innerHTML = '';
+  }
+  function cellEl(r,c){ return document.getElementById('board').children[r*puzzle.n + c]; }
+
+  function burst(el, symbols, count){
+    var wrap = document.querySelector('.board-wrap');
+    var wb = wrap.getBoundingClientRect(), box = el.getBoundingClientRect();
+    var cx = box.left - wb.left + box.width/2, cy = box.top - wb.top + box.height/2;
+    for(var i=0;i<count;i++){
+      (function(i){
+        var p = document.createElement('div');
+        p.className = 'fx';
+        p.textContent = symbols[i % symbols.length];
+        var ang = (Math.PI*2*i)/count + Math.random()*0.6;
+        var dist = 34 + Math.random()*30;
+        p.style.left = cx+'px'; p.style.top = cy+'px';
+        p.style.setProperty('--dx', Math.cos(ang)*dist + 'px');
+        p.style.setProperty('--dy', (Math.sin(ang)*dist - 16) + 'px');
+        p.style.setProperty('--rot', (Math.random()*140-70) + 'deg');
+        p.style.animation = 'fxFloat .7s ease-out forwards';
+        wrap.appendChild(p);
+        setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 760);
+      })(i);
+    }
+  }
+
+  /* ================= INPUT ================= */
+  var dragging=false, dragPainted=false, dragStartCell=null, sweepCount=0, dragMode='paint';
+  var lastTapKey=null, lastTapTime=0;
+  var boardRect=null, cellSize=0, lastCellR=-1, lastCellC=-1;
+
+  function measureBoard(){
+    var el = document.getElementById('board');
+    if(!el || !puzzle) return;
+    boardRect = el.getBoundingClientRect();
+    cellSize = (boardRect.width - 8) / puzzle.n;   // 4px padding each side
+  }
+  function cellAt(x, y){
+    if(!boardRect || !cellSize) return null;
+    var c = Math.floor((x - boardRect.left - 4) / cellSize);
+    var r = Math.floor((y - boardRect.top  - 4) / cellSize);
+    if(r<0 || c<0 || r>=puzzle.n || c>=puzzle.n) return null;
+    return {r:r, c:c};
+  }
+
+  function attachBoardInput(el){
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+    el.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  }
+
+  function onPointerDown(e){
+    if(gameOver) return;
+    var t = e.target.closest ? e.target.closest('.cell') : null;
+    if(!t) return;
+    e.preventDefault();
+    measureBoard();
+    dragging = true; dragPainted = false; sweepCount = 0;
+    dragStartCell = t;
+    var sr = parseInt(t.dataset.r,10), sc = parseInt(t.dataset.c,10);
+    lastCellR = sr; lastCellC = sc;
+    /* The square you start on sets the direction for the whole sweep:
+       start blank to add crosses, start on a cross to rub them out. */
+    dragMode = (board[sr][sc] === 2) ? 'erase' : 'paint';
+    try{ e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); }catch(err){}
+  }
+
+  function onPointerMove(e){
+    if(!dragging || gameOver) return;
+    e.preventDefault();
+    /* Coalesced events give every position the digitiser actually sampled,
+       not just one per animation frame - so a fast flick is traced fully. */
+    var pts = (e.getCoalescedEvents && e.getCoalescedEvents()) || [e];
+    if(!pts.length) pts = [e];
+    for(var i=0;i<pts.length;i++){
+      var hit = cellAt(pts[i].clientX, pts[i].clientY);
+      if(!hit) continue;
+      if(hit.r === lastCellR && hit.c === lastCellC) continue;
+      if(!dragPainted){
+        dragPainted = true; lastTapKey = null;
+        applyAt(lastCellR, lastCellC);
+      }
+      traceLine(lastCellR, lastCellC, hit.r, hit.c);
+      lastCellR = hit.r; lastCellC = hit.c;
+    }
+  }
+
+  /* Bresenham across the grid so no square between two samples is skipped,
+     however fast the finger moves. */
+  function traceLine(r0, c0, r1, c1){
+    var dr = Math.abs(r1-r0), dc = Math.abs(c1-c0);
+    var sr = r0<r1?1:-1, sc = c0<c1?1:-1;
+    var err = dc-dr, r = r0, c = c0, guard = 0;
+    while(guard++ < 400){
+      if(!(r===r0 && c===c0)) applyAt(r, c);
+      if(r===r1 && c===c1) break;
+      var e2 = 2*err;
+      if(e2 > -dr){ err -= dr; c += sc; }
+      if(e2 <  dc){ err += dc; r += sr; }
+    }
+  }
+
+  /* Every square crossed gets its own sound and its own buzz. Sweeping never
+     touches a placed poodle in either direction. */
+  function applyAt(r, c){
+    if(gameOver) return;
+    if(r<0 || c<0 || r>=puzzle.n || c>=puzzle.n) return;
+    var cur = board[r][c], el = cellEl(r,c);
+    if(!el) return;
+    if(dragMode === 'erase'){
+      if(cur !== 2) return;
+      board[r][c] = 0; renderCellContent(el,r,c); SFX.sweepDown(sweepCount++);
+    } else {
+      if(cur !== 0) return;
+      board[r][c] = 2; renderCellContent(el,r,c); SFX.sweep(sweepCount++);
+    }
+    hapticsArmed = true;
+    HAPTIC.sweep();
+    runDirty = true;
+  }
+
+  function onPointerUp(){
+    if(!dragging) return;
+    dragging = false;
+    if(dragPainted){
+      dragPainted = false; dragStartCell = null;
+      if(runDirty){ runDirty = false; snapshotRun(); }
+      return;
+    }
+    if(dragStartCell && !gameOver){ hapticsArmed = true; handleTap(dragStartCell); }
+    dragStartCell = null;
+  }
+
+  function handleTap(el){
+    var r = parseInt(el.dataset.r,10), c = parseInt(el.dataset.c,10);
+    var key = r+','+c, now = Date.now();
+    if(key === lastTapKey && (now - lastTapTime) < DOUBLE_TAP_MS){
+      lastTapKey = null; lastTapTime = 0;
+      placeDog(el, r, c);
+      return;
+    }
+    lastTapKey = key; lastTapTime = now;
+    if(board[r][c] === 1){
+      board[r][c] = 0; renderCellContent(el,r,c); updateDogCounter(); SFX.unmark(); HAPTIC.unmark();
+    } else if(board[r][c] === 2){
+      board[r][c] = 0; renderCellContent(el,r,c); SFX.unmark(); HAPTIC.unmark();
+    } else {
+      board[r][c] = 2; renderCellContent(el,r,c); SFX.mark(); HAPTIC.mark();
+    }
+    snapshotRun();
+  }
+
+  function placeDog(el, r, c){
+    if(board[r][c] === 1) return;
+    if(puzzle.solution[r] !== c){
+      hearts--; mistakeCount++;
+      updateHearts(); SFX.wrong(); HAPTIC.wrong();
+      el.classList.remove('flash','shake'); void el.offsetWidth;
+      el.classList.add('flash','shake');
+      burst(el, ['💢','💨'], 5);
+      board[r][c] = 2; renderCellContent(el,r,c);
+      if(hearts <= 0){
+        gameOver = true; stopTimer(); clearRun();
+        setTimeout(showLose, 520);
+      } else {
+        snapshotRun();
+        showToast('No poodle there — ' + hearts + (hearts===1?' life left':' lives left'));
+      }
+      return;
+    }
+    board[r][c] = 1;
+    renderCellContent(el,r,c);
+    el.classList.remove('pop','glow'); void el.offsetWidth;
+    el.classList.add('pop','glow');
+    SFX.correct(); HAPTIC.correct();
+    burst(el, ['🐾','✨','💛'], 7);
+    if(settings.autoCross) autoCross(r,c);
+    updateDogCounter(); snapshotRun(); checkWin();
+  }
+
+  function autoCross(dr, dc){
+    var n = puzzle.n;
+    for(var r=0;r<n;r++) for(var c=0;c<n;c++){
+      if(r===dr && c===dc) continue;
+      if(board[r][c] !== 0) continue;
+      if(r===dr || c===dc ||
+         puzzle.regionOf[r][c] === puzzle.regionOf[dr][dc] ||
+         (Math.abs(r-dr)<=1 && Math.abs(c-dc)<=1)){
+        board[r][c] = 2;
+        renderCellContent(cellEl(r,c), r, c);
+      }
+    }
+  }
+
+  function countPlaced(){
+    var n = 0;
+    for(var r=0;r<puzzle.n;r++) for(var c=0;c<puzzle.n;c++) if(board[r][c]===1) n++;
+    return n;
+  }
+
+  function giveHint(){
+    if(gameOver) return;
+    if(hints.left <= 0){
+      showToast('Out of hints — they refill tomorrow');
+      return;
+    }
+    for(var r=0;r<puzzle.n;r++){
+      var sc = puzzle.solution[r];
+      if(board[r][sc] !== 1){
+        if(!spendHint()) return;
+        hintCount++;
+        board[r][sc] = 1;
+        renderBoard();
+        if(settings.autoCross) autoCross(r, sc);
+        var el = cellEl(r, sc);
+        el.classList.add('pop','glow');
+        SFX.correct(); HAPTIC.correct();
+        burst(el, ['💡','🐾'], 6);
+        updateDogCounter(); snapshotRun();
+        showToast('Hint used — ' + hints.left + ' left');
+        checkWin();
+        return;
+      }
+    }
+    showToast('No hint needed!');
+  }
+
+  function checkWin(){
+    if(countPlaced() !== puzzle.n) return;
+    gameOver = true;
+    stopTimer(); clearRun();
+    elapsedSec = Math.floor((Date.now()-levelStart)/1000);
+    paintTimer();
+
+    var result = computeScore({mistakes:mistakeCount, hints:hintCount, attempts:attemptCount});
+    var stars = starsForScore(result.score);
+    var prev = progress[currentLevel];
+    var firstClear = !(prev && prev.completed);
+    progress[currentLevel] = {
+      completed:true,
+      stars: (prev && prev.stars) ? Math.max(prev.stars, stars) : stars,
+      best:  (prev && prev.best)  ? Math.max(prev.best, result.score) : result.score,
+      bestTime: (prev && prev.bestTime) ? Math.min(prev.bestTime, elapsedSec) : elapsedSec,
+      perfect: (prev && prev.perfect) || result.perfect
+    };
+    attemptCount = 1;
+    var earnedHint = firstClear ? earnHintForLevel() : false;
+    save(); refreshPlayButton(); updateHintUI();
+
+    var firstEver = (currentLevel === 1) && !profile;
+    setTimeout(function(){
+      SFX.win(); HAPTIC.win();
+      if(firstEver){
+        showNameSetup(function(){
+          submitScore(currentLevel, result.score, elapsedSec, result.perfect);
+          showWin(stars, result, earnedHint);
+        });
+      } else {
+        submitScore(currentLevel, result.score, elapsedSec, result.perfect);
+        showWin(stars, result, earnedHint);
+      }
+    }, 380);
+  }
+
+  /* ================= MODALS ================= */
+  var WIN_MESSAGES = [
+    {title:"Good pup!",             line:"Every poodle found a spot."},
+    {title:"Who's a clever one?",   line:"Deduced, not guessed."},
+    {title:"Tail wags all round!",  line:"That board never stood a chance."},
+    {title:"Pawsitively brilliant!",line:"All the yards are settled."},
+    {title:"Top of the class!",     line:"You sniffed out every square."},
+    {title:"What a good boy!",      line:"The whole pack is happy."},
+    {title:"Nailed it!",            line:"Clean logic, no lucky guesses."},
+    {title:"Best in show!",         line:"That was proper detective work."},
+    {title:"Puzzle fetched!",       line:"Dropped right at your feet."},
+    {title:"Poodle perfection!",    line:"Every rule obeyed, every yard filled."}
+  ];
+  var winBag = [];
+  function nextWinMessage(){
+    if(!winBag.length){
+      winBag = WIN_MESSAGES.slice();
+      for(var i=winBag.length-1;i>0;i--){
+        var j = Math.floor(Math.random()*(i+1));
+        var t = winBag[i]; winBag[i] = winBag[j]; winBag[j] = t;
+      }
+    }
+    return winBag.pop();
+  }
+
+  function closeOverlay(){ document.getElementById('overlay').classList.remove('active'); }
+
+  function showNameSetup(onDone){
+    var modal = document.getElementById('modal');
+    modal.innerHTML =
+      '<div class="modal-pup">' + poodleSVG('brown','n1') + '</div>' +
+      '<h2>Pick your pup name</h2>' +
+      '<p>Your scores are saved under this name.</p>' +
+      '<input id="name-input" type="text" maxlength="' + NAME_MAX + '" autocomplete="off" ' +
+        'placeholder="e.g. Biscuit" style="width:100%; padding:13px 14px; font-size:17px; ' +
+        'font-family:\'Baloo 2\',sans-serif; font-weight:700; text-align:center; border-radius:14px; ' +
+        'border:2.5px solid var(--cream-dark); background:#fff; color:var(--brown-dark); ' +
+        'outline:none; margin-bottom:6px;">' +
+      '<div id="name-msg" style="min-height:20px; font-size:12.5px; font-weight:700; ' +
+        'margin-bottom:12px; color:var(--brown);">&nbsp;</div>' +
+      '<button class="btn" id="btn-name-save">Save name</button>' +
+      '<button class="btn secondary" id="btn-name-skip">Maybe later</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    var input = document.getElementById('name-input');
+    var msg = document.getElementById('name-msg');
+    var btn = document.getElementById('btn-name-save');
+    function setMsg(text, good){
+      msg.textContent = text || '\u00a0';
+      msg.style.color = good ? '#4F8F5F' : 'var(--danger)';
+    }
+    var timer = null;
+    input.addEventListener('input', function(){
+      clearTimeout(timer);
+      var v = validateName(input.value);
+      if(!v.ok){ setMsg(input.value.trim() ? v.reason : '', false); return; }
+      timer = setTimeout(function(){
+        checkNameAvailable(v.name).then(function(res){
+          setMsg(res.available ? '"' + v.name + '" is free!' : 'Someone already has that one.', res.available);
+        });
+      }, 220);
+    });
+    btn.onclick = function(){
+      var v = validateName(input.value);
+      if(!v.ok){ setMsg(v.reason, false); HAPTIC.wrong(); return; }
+      btn.disabled = true;
+      checkNameAvailable(v.name).then(function(res){
+        if(!res.available){
+          setMsg('Someone already has that one. Try another.', false);
+          HAPTIC.wrong(); btn.disabled = false; return;
+        }
+        claimName(v.name, res.key);
+        SFX.correct(); HAPTIC.correct();
+        closeOverlay(); refreshProfileUI();
+        showToast('Welcome, ' + v.name + '!');
+        if(onDone) onDone();
+      });
+    };
+    document.getElementById('btn-name-skip').onclick = function(){
+      closeOverlay(); if(onDone) onDone();
+    };
+    setTimeout(function(){ try{ input.focus(); }catch(e){} }, 250);
+  }
+
+  function showRules(){
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">📖</div><h2>How to play</h2>' +
+      '<div class="panel"><b>The rules</b><ul>' +
+        '<li>One poodle in every colored yard.</li>' +
+        '<li>One poodle in every row.</li>' +
+        '<li>One poodle in every column.</li>' +
+        '<li>No two poodles may touch, even diagonally.</li>' +
+      '</ul><br><b>The controls</b><ul>' +
+        '<li><b>Tap</b> to mark <span class="demo-x">✕</span>, tap again to clear.</li>' +
+        '<li><b>Double tap</b> to place a poodle.</li>' +
+        '<li><b>Drag</b> from a blank square to sweep ✕ on; drag from a ✕ to rub them off.</li>' +
+      '</ul><br>Every puzzle is solvable by reasoning alone — you never need to guess.</div>' +
+      '<button class="btn" id="btn-close-rules">Got it</button>';
+    document.getElementById('overlay').classList.add('active');
+    document.getElementById('btn-close-rules').onclick = closeOverlay;
+  }
+
+  function showWin(stars, result, earnedHint){
+    var msg = nextWinMessage();
+    var isLast = currentLevel >= TOTAL_LEVELS;
+    var entry = progress[currentLevel] || {};
+    var isNewBest = result && entry.best === result.score;
+
+    var rows = '<div><span>Clean solve</span><span>' + SCORE_MAX + '</span></div>';
+    if(result.mistakePenalty > 0)
+      rows += '<div><span>' + result.mistakes_label + '</span><span class="minus">-' + result.mistakePenalty + '</span></div>';
+    if(result.hintPenalty > 0)
+      rows += '<div><span>' + result.hints_label + '</span><span class="minus">-' + result.hintPenalty + '</span></div>';
+    if(result.attemptPenalty > 0)
+      rows += '<div><span>' + result.retries_label + '</span><span class="minus">-' + result.attemptPenalty + '</span></div>';
+    rows += '<div class="total"><span>Score</span><span>' + result.score + '</span></div>';
+    rows += '<div style="opacity:.62; font-size:11.5px; padding-top:2px;"><span>Solved in ' +
+            formatTime(elapsedSec) + '</span><span>time doesn\'t affect score</span></div>';
+
+    document.getElementById('modal').innerHTML =
+      '<div class="modal-pup">' + poodleSVG(stars===3 ? 'white' : 'brown','w1') + '</div>' +
+      '<h2>' + msg.title + '</h2>' +
+      '<div class="score-big">' + result.score + '</div>' +
+      (result.perfect ? '<div style="font-size:13px;font-weight:800;color:#4F8F5F;margin-bottom:4px;">Flawless run!</div>' :
+        (isNewBest ? '<div style="font-size:13px;font-weight:800;color:var(--gold-dark);margin-bottom:4px;">New personal best</div>' : '')) +
+      '<div class="stars-big">' + new Array(stars+1).join('★') + new Array(MAX_HEARTS-stars+1).join('☆') + '</div>' +
+      '<div class="score-breakdown">' + rows + '</div>' +
+      (earnedHint ? '<p style="color:var(--gold-dark);font-weight:800;">💡 You earned a hint back!</p>' : '') +
+      '<p>' + msg.line + '</p>' +
+      (isLast ? '<button class="btn" id="btn-done">All 200 done! 🎉</button>'
+              : '<button class="btn" id="btn-next">Next Level</button>') +
+      '<button class="btn secondary" id="btn-win-lb">Leaderboard</button>' +
+      '<button class="btn secondary" id="btn-win-menu">Menu</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    if(isLast) document.getElementById('btn-done').onclick = closeOverlay;
+    else document.getElementById('btn-next').onclick = function(){
+      closeOverlay(); startLevel(currentLevel + 1);
+    };
+    document.getElementById('btn-win-lb').onclick = function(){
+      closeOverlay(); lbMode='total'; renderLeaderboard(); showScreen('screen-leaderboard');
+    };
+    document.getElementById('btn-win-menu').onclick = function(){
+      closeOverlay(); refreshPlayButton(); showScreen('screen-title');
+    };
+  }
+
+  function showLose(){
+    SFX.lose(); HAPTIC.lose();
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🐾</div><h2>Out of lives</h2>' +
+      '<p>Every pup needs practice. The answer is always there in the rules — have another look.</p>' +
+      '<button class="btn" id="btn-retry">Try Again</button>' +
+      '<button class="btn secondary" id="btn-lose-menu">Menu</button>';
+    document.getElementById('overlay').classList.add('active');
+    document.getElementById('btn-retry').onclick = function(){
+      closeOverlay();
+      attemptCount++;
+      var keep = attemptCount;
+      clearRun();
+      attemptCount = keep; lastAttemptedLevel = currentLevel;
+      startLevel(currentLevel, true);
+    };
+    document.getElementById('btn-lose-menu').onclick = function(){
+      closeOverlay(); refreshPlayButton(); showScreen('screen-title');
+    };
+  }
+
+  /* ================= INIT ================= */
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+  document.addEventListener('dblclick', function(e){ e.preventDefault(); }, {passive:false});
+
+  refreshPlayButton();
+  refreshProfileUI();
+  updateHintUI();
+  diagnoseHaptics();
+
+})();
+</script>
+</body>
+</html>
