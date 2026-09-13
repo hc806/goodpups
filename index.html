@@ -748,6 +748,21 @@
         const u = getAuth(app).currentUser;
         return (u && u.email) || '';
       },
+      accountName: function(){
+        const u = getAuth(app).currentUser;
+        return (u && u.displayName) || '';
+      },
+      /* The player's chosen name lives in Firestore, so a fresh device can
+         recover the whole identity from the Google account alone - not just
+         the scores. */
+      async myPlayer(){
+        const snap = await getDoc(doc(db, "players", getAuth(app).currentUser.uid));
+        return snap.exists() ? snap.data() : null;
+      },
+      async signOut(){
+        const { signOut } = await import(V + "firebase-auth.js");
+        await signOut(getAuth(app));
+      },
       async isNameFree(key){
         const snap = await getDoc(doc(db, "usernames", key));
         return !snap.exists() || snap.data().uid === uid;
@@ -1504,7 +1519,7 @@
       if(window.GP_ERROR) showToast('Sign-in did not complete');
     }
 
-    if(cloud) restoreFromCloud();
+    if(cloud) adoptCloudIdentity();
     updateCloudStatus();
     updateAccountStatus();
   });
@@ -1515,6 +1530,45 @@
      finished and how well, so it can rebuild progress. Merge, never replace:
      whichever of local or cloud is better for a given level wins, so playing
      offline and syncing later can't cost you anything. */
+  /* Run on every load once the cloud is ready. If this account already has a
+     player profile saved - because they signed in before, or are on a new
+     phone - take the name and uid from it rather than treating them as a
+     stranger. This is what makes "signed in" actually mean something on the
+     next visit instead of asking again. */
+  function adoptCloudIdentity(){
+    if(!cloud || !cloud.uid){ return; }
+    var signedIn = cloud.isGoogleLinked && cloud.isGoogleLinked();
+
+    /* not signed in with Google: behave as before, keyed to this device */
+    if(!signedIn){ restoreFromCloud(); return; }
+
+    cloud.myPlayer().then(function(rec){
+      if(rec && rec.name){
+        var isNew = !profile || profile.id !== cloud.uid || profile.name !== rec.name;
+        profile = {
+          id: cloud.uid,
+          name: rec.name,
+          key: rec.key || normalizeName(rec.name),
+          created: (profile && profile.created) || Date.now()
+        };
+        save();
+        refreshProfileUI();
+        refreshPlayButton();
+        if(isNew) showToast('Welcome back, ' + rec.name + '!');
+      } else if(profile){
+        /* signed in but no cloud profile yet: push the local one up */
+        profile.id = cloud.uid;
+        save();
+      }
+      restoreFromCloud();
+    }, function(){ restoreFromCloud(); });
+  }
+
+  function renderLevelGridIfVisible(){
+    var s = document.getElementById('screen-levels');
+    if(s && s.classList.contains('active')) renderLevelGrid();
+  }
+
   function restoreFromCloud(){
     if(!cloud) return;
     /* after a Google sign-in the uid may have changed, so trust the live one */
@@ -1563,9 +1617,11 @@
       refreshPlayButton();
 
       if(recovered > 0){
-        showToast('Welcome back — ' + recovered + ' level' +
-                  (recovered===1?'':'s') + ' restored');
+        var next = resumeLevel();
+        showToast(recovered + ' level' + (recovered===1?'':'s') +
+                  ' restored — carry on at level ' + next);
       }
+      renderLevelGridIfVisible();
       pushScores();
     }, function(){ pushScores(); });
   }
@@ -1574,21 +1630,31 @@
     var el = document.getElementById('account-status');
     var btn = document.getElementById('btn-google');
     if(!el) return;
+
     if(!cloud){
       el.textContent = 'Needs a cloud connection first.';
-      if(btn) btn.disabled = true;
+      if(btn){ btn.disabled = true; btn.textContent = 'Sign in'; }
       return;
     }
-    if(btn) btn.disabled = false;
+
     if(cloud.isGoogleLinked && cloud.isGoogleLinked()){
       var em = (cloud.accountEmail && cloud.accountEmail()) || '';
-      el.textContent = 'Saved to your Google account' + (em ? ' (' + em + ')' : '') +
-                       '. Sign in anywhere to pick up where you left off.';
-      if(btn) btn.textContent = 'Signed in';
-    } else {
-      el.textContent = 'Right now progress lives on this device. Sign in so it survives a reinstall or moves to another phone.';
-      if(btn) btn.textContent = 'Sign in';
+      var next = resumeLevel();
+      el.innerHTML =
+        '<span style="color:#4F8F5F; font-weight:800;">✓ Signed in</span>' +
+        (em ? '<br>' + escapeHtml(em) : '') +
+        '<br>Progress is saved to this account — you\'ll pick up at level ' + next +
+        ' on any device.';
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = 'Sign out';
+        btn.style.maxWidth = '104px';
+      }
+      return;
     }
+
+    el.textContent = 'Progress lives on this device only. Sign in so it survives a reinstall or moves to another phone.';
+    if(btn){ btn.disabled = false; btn.textContent = 'Sign in'; }
   }
 
   function updateCloudStatus(){
@@ -1940,8 +2006,19 @@
     var gBtn = document.getElementById('btn-google');
     gBtn.onclick = function(){
       if(!cloud){ showToast('Not connected to the cloud yet'); return; }
+
       if(cloud.isGoogleLinked && cloud.isGoogleLinked()){
-        showToast('Already saved to your Google account');
+        /* Signing out is deliberately blunt about what it does - progress is
+           safe in the cloud, but this device goes back to being anonymous. */
+        if(!confirm('Sign out?\n\nYour progress stays saved to your Google account. This device will start fresh until you sign back in.')) return;
+        gBtn.disabled = true;
+        cloud.signOut().then(function(){
+          showToast('Signed out — reloading');
+          setTimeout(function(){ location.reload(); }, 700);
+        }, function(){
+          gBtn.disabled = false;
+          showToast('Could not sign out');
+        });
         return;
       }
       gBtn.disabled = true;
@@ -2587,7 +2664,7 @@
         /* Best moment to offer this: they have just invested in a name, so
            protecting it makes obvious sense. Skippable - nobody needs a Google
            account to play. */
-        if(cloud && cloud.isGoogleLinked && !cloud.isGoogleLinked()){
+        if(cloud && cloud.isGoogleLinked && !cloud.isGoogleLinked()){   /* already signed in? skip the offer entirely */
           offerSignIn(v.name, onDone);
         } else {
           closeOverlay();
