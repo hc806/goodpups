@@ -836,7 +836,12 @@
       const auth2 = getAuth(app);
 
       if(isMobile){
-        try{ sessionStorage.setItem('gp_pending_link', '1'); }catch(e){}
+        try{
+          sessionStorage.setItem('gp_pending_link', '1');
+          /* the redirect reloads the page, which would otherwise dump the
+             player back on the title screen mid-task */
+          sessionStorage.setItem('gp_return_screen', window.__gpScreen || 'screen-settings');
+        }catch(e){}
         if(auth2.currentUser && auth2.currentUser.isAnonymous){
           await linkWithRedirect(auth2.currentUser, provider);
         } else {
@@ -942,7 +947,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260913.222509';
+  var GP_VERSION = '20260913.223837';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -2332,6 +2337,16 @@
       }
       try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
       justConnected = true;
+      var back = null;
+      try{ back = sessionStorage.getItem('gp_return_screen');
+           sessionStorage.removeItem('gp_return_screen'); }catch(e){}
+      if(back && document.getElementById(back)){
+        showScreen(back);
+        if(back === 'screen-settings'){
+          updateCloudStatus(); updateAccountStatus(); diagnoseHaptics();
+          updateHintUI(); updateVersionUI();
+        }
+      }
     } else if(pending){
       try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
       if(window.GP_ERROR) showToast('Connection did not complete');
@@ -2396,15 +2411,78 @@
   function afterConnect(onDone){
     if(!cloud){ if(onDone) onDone(); return; }
     showToast('Connected — checking your saves…');
-    cloud.topScores(50).then(function(docs){
-      var mineDoc = null, id = cloud.uid || (profile && profile.id);
-      for(var i=0;i<docs.length;i++){ if(docs[i].id === id){ mineDoc = docs[i]; break; } }
-      resolveProgressConflict(mineDoc, onDone);
+
+    var uid = cloud.uid;
+
+    /* Linking usually KEEPS the same uid, so everything stays attached. But if
+       this Google account was already used on another device, Firebase signs
+       you in as that older account instead - a different uid, with its own
+       name and its own scores. That is why progress appeared not to load: the
+       game was looking under an identity that had nothing in it.
+       So: read the account's own name and scores, and seed them from this
+       phone if the account is genuinely new. */
+    Promise.all([
+      cloud.myPlayer().catch(function(){ return null; }),
+      cloud.topScores(50).catch(function(){ return []; })
+    ]).then(function(res){
+      var rec = res[0], docs = res[1] || [];
+      var doc = null;
+      for(var i=0;i<docs.length;i++){ if(docs[i].id === uid){ doc = docs[i]; break; } }
+
+      var cloudName = (rec && rec.name) || (doc && doc.name) || null;
+      var localName = profile && profile.name;
+
+      /* adopt the account's uid locally whatever happens next */
+      if(profile){ profile.id = uid; }
+
+      if(cloudName && localName && cloudName !== localName){
+        askWhichName(cloudName, localName, rec, function(){
+          resolveProgressConflict(doc, onDone);
+        });
+        return;
+      }
+
+      if(!cloudName && localName){
+        /* brand-new account: put this phone's name on it. A failed claim is
+           not fatal - the leaderboard reads the name off the score card, so
+           the worst case is the name register lags behind. */
+        claimName(localName, normalizeName(localName));
+      } else if(cloudName && !localName){
+        profile = { id: uid, name: cloudName, key: (rec && rec.key) || normalizeName(cloudName),
+                    created: Date.now() };
+        save(); refreshProfileUI();
+      }
+      resolveProgressConflict(doc, onDone);
     }, function(){
       pushScores();
       showToast('Connected — progress is safe now');
       if(onDone) onDone();
     });
+  }
+
+  /* Same person, two names. Ask before overwriting either. */
+  function askWhichName(cloudName, localName, rec, onDone){
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🏷️</div>' +
+      '<h2>Two names</h2>' +
+      '<p>This phone and your Google account use different names. Which is yours?</p>' +
+      '<button class="btn" id="btn-name-cloud">Use <b>' + escapeHtml(cloudName) + '</b><span class="sub">the name on your account</span></button>' +
+      '<button class="btn secondary" id="btn-name-local">Use <b>' + escapeHtml(localName) + '</b><span class="sub">the name on this phone</span></button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('btn-name-cloud').onclick = function(){
+      profile = { id: cloud.uid, name: cloudName,
+                  key: (rec && rec.key) || normalizeName(cloudName), created: Date.now() };
+      save(); refreshProfileUI(); syncLeaderboardName();
+      closeOverlay();
+      if(onDone) onDone();
+    };
+    document.getElementById('btn-name-local').onclick = function(){
+      claimName(localName, normalizeName(localName));
+      refreshProfileUI();
+      closeOverlay();
+      if(onDone) onDone();
+    };
   }
 
   /* ---- comparing the two saves ---- */
@@ -2485,13 +2563,21 @@
     var theirs = cloudLevelsOf(cloudDoc);
     var ms = summarise(mine), ts = summarise(theirs);
 
-    if(ts.count === 0){ pushScores(); if(onDone) onDone(); return; }
+    if(ts.count === 0){ pushScores(); updateAccountStatus();
+                        showToast('Connected — this phone\'s progress is now saved');
+                        if(onDone) onDone(); return; }
     if(ms.count === 0){ adoptLevels(theirs); pushScores(); refreshPlayButton();
+                        refreshProfileUI(); updateAccountStatus(); renderLevelGridIfVisible();
                         showToast(ts.count + ' levels loaded from your account');
                         if(onDone) onDone(); return; }
 
     var same = ms.count === ts.count && ms.stars === ts.stars && ms.furthest === ts.furthest;
-    if(same){ pushScores(); if(onDone) onDone(); return; }
+    if(same){ pushScores(); updateAccountStatus();
+              showToast('Connected — already in sync');
+              if(onDone) onDone(); return; }
+
+    var mineName = (profile && profile.name) || 'this phone';
+    var theirName = (cloudDoc && cloudDoc.name) || mineName;
 
     function card(title, s, note){
       return '<div style="background:#fff;border:2px solid var(--cream-dark);border-radius:14px;' +
@@ -2507,8 +2593,8 @@
       '<div class="emoji">🔀</div>' +
       '<h2>Two sets of progress</h2>' +
       '<p>This phone and your Google account each have a save. Which should GoodPups keep?</p>' +
-      card('On this phone', ms) +
-      card('In your account', ts, escapeHtml(profile.name || '')) +
+      card('On this phone', ms, escapeHtml(mineName)) +
+      card('In your Google account', ts, escapeHtml(theirName)) +
       '<button class="btn" id="btn-pc-merge">Combine both</button>' +
       '<button class="btn secondary" id="btn-pc-local">Keep this phone\'s</button>' +
       '<button class="btn secondary" id="btn-pc-cloud">Keep my account\'s</button>' +
@@ -2519,6 +2605,9 @@
       adoptLevels(levels);
       pushScores();
       refreshPlayButton();
+      refreshProfileUI();
+      updateAccountStatus();
+      renderLevelGridIfVisible();
       closeOverlay();
       showToast(msg);
       if(onDone) onDone();
@@ -2691,7 +2780,11 @@
     syncLeaderboardName();
     if(cloud){
       cloud.claimName(key, name, oldKey).then(pushScores, function(){
-        showToast('Saved here — cloud will catch up');
+        /* The name register may already hold this name under an old anonymous
+           account, and the rules rightly refuse to overwrite someone else's.
+           That must not stop play: the leaderboard takes its name from the
+           score card, which we can always write. */
+        pushScores();
       });
     }
   }
@@ -2865,6 +2958,7 @@
     var list = document.querySelectorAll('.screen');
     for(var i=0;i<list.length;i++) list[i].classList.remove('active');
     document.getElementById(id).classList.add('active');
+    window.__gpScreen = id;
   }
   function refreshPlayButton(){
     var p = pendingRun();
