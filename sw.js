@@ -26,6 +26,13 @@ self.addEventListener('install', (event) => {
   );
 });
 
+/* The page asks for this when the player taps Reload on an update. Without
+   it a freshly installed worker sits in "waiting" until every tab closes,
+   which on an installed app can be days. */
+self.addEventListener('message', (event) => {
+  if (event.data === 'skipWaiting') self.skipWaiting();
+});
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
