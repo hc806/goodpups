@@ -288,18 +288,21 @@
   }
   .grid-lines .gl-thick{stroke:#FFFFFF; stroke-width:5;}
   .grid-lines .gl-thin{stroke:rgba(255,255,255,0.42); stroke-width:2;}
+  /* The cross has to read instantly as "ruled out" against nine different
+     yard colours. A darker dish plus a stronger white stroke keeps it legible
+     on the pale greens and blues where it was previously washing out. */
   .cell .mark-x{
-    position:absolute; inset:14%;
+    position:absolute; inset:13%;
     display:flex; align-items:center; justify-content:center;
     border-radius:26%;
-    background:radial-gradient(circle at 50% 42%, rgba(0,0,0,.30) 0%, rgba(0,0,0,.14) 62%, rgba(0,0,0,.05) 100%);
-    box-shadow:inset 0 2px 4px rgba(0,0,0,.30), inset 0 -1px 0 rgba(255,255,255,.38);
+    background:radial-gradient(circle at 50% 42%, rgba(0,0,0,.46) 0%, rgba(0,0,0,.30) 62%, rgba(0,0,0,.18) 100%);
+    box-shadow:inset 0 2px 5px rgba(0,0,0,.42), inset 0 -1px 0 rgba(255,255,255,.30);
     animation:xIn .22s cubic-bezier(.34,1.56,.64,1);
   }
   .cell .mark-x svg{width:56%; height:56%; display:block;}
   .cell .x-stroke{
-    stroke:#FFFFFF; stroke-width:16; stroke-linecap:round; fill:none;
-    filter:drop-shadow(0 1.5px 1.5px rgba(0,0,0,.45));
+    stroke:#FFFFFF; stroke-width:19; stroke-linecap:round; fill:none;
+    filter:drop-shadow(0 1.5px 2px rgba(0,0,0,.6));
   }
   @keyframes xIn{
     0%{transform:scale(.2) rotate(-35deg); opacity:0;}
@@ -642,7 +645,8 @@
     const { initializeApp } = await import(V + "firebase-app.js");
     const { getAuth, signInAnonymously, onAuthStateChanged,
             GoogleAuthProvider, signInWithPopup, signInWithRedirect,
-            linkWithPopup, signInWithCredential, getRedirectResult }
+            linkWithPopup, linkWithRedirect, signInWithCredential,
+            getRedirectResult }
       = await import(V + "firebase-auth.js");
     const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection,
             query, orderBy, limit, getDocs, runTransaction, serverTimestamp }
@@ -652,6 +656,31 @@
     const app  = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db   = getFirestore(app);
+
+    /* If we are returning from a Google redirect, settle that first so the
+       uid we report is the linked one, not a fresh anonymous account. */
+    let redirectInfo = null;
+    try{
+      const rr = await getRedirectResult(auth);
+      if(rr && rr.user){
+        redirectInfo = { uid: rr.user.uid, email: rr.user.email || '' };
+      }
+    }catch(err){
+      /* already linked elsewhere: sign in as that account instead */
+      if(err && (err.code === 'auth/credential-already-in-use' ||
+                 err.code === 'auth/email-already-in-use')){
+        try{
+          const cred = GoogleAuthProvider.credentialFromError(err);
+          if(cred){
+            const res = await signInWithCredential(auth, cred);
+            redirectInfo = { uid: res.user.uid, email: res.user.email || '', changed: true };
+          }
+        }catch(e2){ window.GP_ERROR = (e2 && e2.code) || 'link failed'; }
+      } else if(err){
+        window.GP_ERROR = (err.code || err.message || 'redirect failed');
+      }
+    }
+    window.GP_REDIRECT = redirectInfo;
 
     const uid = await new Promise((resolve, reject) => {
       const stop = onAuthStateChanged(auth, u => { if(u){ stop(); resolve(u.uid); } });
@@ -665,16 +694,32 @@
        scores and progress stay attached - and signing in on any other device
        returns that same uid. This is what turns "this phone" into "this
        person". */
+    /* Mobile Chrome handles OAuth popups badly - the handler page loads
+       without its parameters and dies with "The requested action is invalid".
+       Redirect is the reliable path on a phone, so that is the default and
+       popup is only used on desktop. */
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
     async function connectGoogle(){
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const auth2 = getAuth(app);
+
+      if(isMobile){
+        try{ sessionStorage.setItem('gp_pending_link', '1'); }catch(e){}
+        if(auth2.currentUser && auth2.currentUser.isAnonymous){
+          await linkWithRedirect(auth2.currentUser, provider);
+        } else {
+          await signInWithRedirect(auth2, provider);
+        }
+        /* the page navigates away here; nothing after this runs */
+        return new Promise(function(){});
+      }
+
       try{
         const res = await linkWithPopup(auth2.currentUser, provider);
         return { uid: res.user.uid, changed: false, email: res.user.email || '' };
       }catch(err){
-        /* Already used on another device: sign in as that account instead and
-           let the cloud restore pull their progress across. */
         if(err && (err.code === 'auth/credential-already-in-use' ||
                    err.code === 'auth/email-already-in-use' ||
                    err.code === 'auth/provider-already-linked')){
@@ -1442,6 +1487,23 @@
   var cloud = null, cloudReady = false;
   (window.GP_BACKEND || Promise.resolve(null)).then(function(b){
     cloud = b; cloudReady = true;
+
+    /* Coming back from a Google redirect: adopt the linked uid, then pull
+       everything that belongs to it. */
+    var pending = false;
+    try{ pending = sessionStorage.getItem('gp_pending_link') === '1'; }catch(e){}
+    if(window.GP_REDIRECT && window.GP_REDIRECT.uid){
+      if(profile){
+        profile.id = window.GP_REDIRECT.uid;
+        save();
+      }
+      try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
+      showToast('Signed in — progress is safe now');
+    } else if(pending){
+      try{ sessionStorage.removeItem('gp_pending_link'); }catch(e){}
+      if(window.GP_ERROR) showToast('Sign-in did not complete');
+    }
+
     if(cloud) restoreFromCloud();
     updateCloudStatus();
     updateAccountStatus();
@@ -1884,7 +1946,10 @@
       }
       gBtn.disabled = true;
       showToast('Opening Google sign-in…');
+      /* on a phone this navigates away and the promise never settles -
+         the result is handled on the way back in */
       cloud.connectGoogle().then(function(res){
+        if(!res) return;
         gBtn.disabled = false;
         if(res.changed && profile){
           /* signed into an existing account - adopt that identity, then pull
@@ -2552,6 +2617,7 @@
       var b = this;
       b.disabled = true;
       cloud.connectGoogle().then(function(res){
+        if(!res) return;
         if(profile){ profile.id = res.uid; save(); }
         updateAccountStatus();
         restoreFromCloud();
