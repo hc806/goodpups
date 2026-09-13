@@ -587,8 +587,16 @@
     appId:      "1:853256118869:web:73ad403601b3bd5b556adc"
   };
 
+  window.GP_MODULE_RAN = true;
+  window.GP_KEY_SEEN = (FIREBASE_CONFIG.apiKey || '').slice(0, 10) || '(empty)';
+  window.GP_PROJ_SEEN = FIREBASE_CONFIG.projectId || '(empty)';
+
   window.GP_BACKEND = (async function(){
-    if(!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId) return null;
+    if(!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId){
+      window.GP_ERROR = 'config blank in the deployed file';
+      return null;
+    }
+    window.GP_STAGE = 'importing firebase';
     const V = "https://www.gstatic.com/firebasejs/10.12.0/";
     const { initializeApp } = await import(V + "firebase-app.js");
     const { getAuth, signInAnonymously, onAuthStateChanged } = await import(V + "firebase-auth.js");
@@ -596,6 +604,7 @@
             query, orderBy, limit, getDocs, runTransaction, serverTimestamp }
       = await import(V + "firebase-firestore.js");
 
+    window.GP_STAGE = 'sdk loaded, signing in';
     const app  = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db   = getFirestore(app);
@@ -606,6 +615,7 @@
       setTimeout(() => reject(new Error("auth timeout")), 12000);
     });
 
+    window.GP_STAGE = 'signed in ok';
     return {
       uid,
       async isNameFree(key){
@@ -1366,8 +1376,15 @@
     }
     /* Show the real reason rather than a generic message - guessing at a
        failed connection wastes far more time than printing the error. */
-    var why = window.GP_ERROR ? (' Reason: ' + window.GP_ERROR) : ' (no config, or it failed to load)';
-    el.textContent = 'Offline. Scores stay on this device.' + why;
+    var bits = [];
+    bits.push('module ran: ' + (window.GP_MODULE_RAN ? 'YES' : 'NO'));
+    if(window.GP_MODULE_RAN){
+      bits.push('key: ' + (window.GP_KEY_SEEN || '?'));
+      bits.push('project: ' + (window.GP_PROJ_SEEN || '?'));
+      bits.push('got to: ' + (window.GP_STAGE || 'nowhere'));
+    }
+    if(window.GP_ERROR) bits.push('error: ' + window.GP_ERROR);
+    el.textContent = 'Offline. ' + bits.join(' | ');
     el.style.userSelect = 'text';
     el.style.webkitUserSelect = 'text';
   }
