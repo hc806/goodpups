@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="GoodPups">
 <meta name="theme-color" content="#FFF6E9">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="description" content="GoodPups — a logic puzzle. One poodle per row, column and yard.">
 <title>GoodPups</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -267,6 +270,19 @@
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; position:relative; overflow:hidden;
   }
+  .grid-lines{
+    position:absolute; inset:4px;
+    width:calc(100% - 8px); height:calc(100% - 8px);
+    pointer-events:none; z-index:4; overflow:visible;
+  }
+  .grid-lines path{
+    fill:none;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+  }
+  .grid-lines .gl-thick{stroke:#FFFFFF; stroke-width:5;}
+  .grid-lines .gl-thin{stroke:rgba(255,255,255,0.42); stroke-width:2;}
   .cell .mark-x{
     position:absolute; inset:14%;
     display:flex; align-items:center; justify-content:center;
@@ -991,24 +1007,8 @@
     bulb:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 18h6M10 21h4" stroke="#8B5E3C" stroke-width="1.8" stroke-linecap="round"/><path d="M12 2.6a6.6 6.6 0 0 0-3.8 12 2.6 2.6 0 0 1 1 1.8v.6h5.6v-.6a2.6 2.6 0 0 1 1-1.8A6.6 6.6 0 0 0 12 2.6z" fill="#FFE08A" stroke="#C9891B" stroke-width="1.5" stroke-linejoin="round"/></svg>'
   };
 
-  /* Home-screen icon: both poodles side by side, drawn as a data-URI SVG so
-     saving to the home screen shows the pair rather than a blank page glyph. */
-  function installAppIcon(){
-    var svg =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">' +
-        '<rect width="180" height="180" rx="40" fill="#FFF1DC"/>' +
-        '<g transform="translate(8,44) scale(0.92)">' + poodleSVG('brown','i1') + '</g>' +
-        '<g transform="translate(78,44) scale(0.92)">' + poodleSVG('white','i2') + '</g>' +
-      '</svg>';
-    var href = 'data:image/svg+xml,' + encodeURIComponent(svg);
-    [['icon',''],['apple-touch-icon','']].forEach(function(pair){
-      var link = document.createElement('link');
-      link.rel = pair[0];
-      link.href = href;
-      document.head.appendChild(link);
-    });
-  }
-  installAppIcon();
+  /* Icons now come from real PNG files linked in <head>, which is what Chrome
+     requires for installability - a generated data-URI icon does not qualify. */
 
   /* ================= AUDIO ================= */
   var audioCtx = null, masterGain = null, reverbSend = null, unlocked = false;
@@ -1391,15 +1391,8 @@
     }
     /* Show the real reason rather than a generic message - guessing at a
        failed connection wastes far more time than printing the error. */
-    var bits = [];
-    bits.push('module ran: ' + (window.GP_MODULE_RAN ? 'YES' : 'NO'));
-    if(window.GP_MODULE_RAN){
-      bits.push('key: ' + (window.GP_KEY_SEEN || '?'));
-      bits.push('project: ' + (window.GP_PROJ_SEEN || '?'));
-      bits.push('got to: ' + (window.GP_STAGE || 'nowhere'));
-    }
-    if(window.GP_ERROR) bits.push('error: ' + window.GP_ERROR);
-    el.textContent = 'Offline. ' + bits.join(' | ');
+    el.textContent = 'Offline — scores are saved on this device only.' +
+      (window.GP_ERROR ? ' (' + window.GP_ERROR + ')' : '');
     el.style.userSelect = 'text';
     el.style.webkitUserSelect = 'text';
   }
@@ -1901,24 +1894,99 @@
     boardEl.style.gridTemplateColumns = 'repeat('+n+', 1fr)';
     boardEl.style.gridTemplateRows = 'repeat('+n+', 1fr)';
     boardEl.innerHTML = '';
-    var thick = '3.5px solid #FFFFFF', thin = '1.5px solid rgba(255,255,255,0.45)';
     for(var r=0;r<n;r++){
       for(var c=0;c<n;c++){
         var cell = document.createElement('div');
         cell.className = 'cell';
         cell.dataset.r = r; cell.dataset.c = c;
-        var reg = puzzle.regionOf[r][c];
-        cell.style.background = REGION_COLORS[reg % REGION_COLORS.length];
-        cell.style.borderTop    = (r===0   || puzzle.regionOf[r-1][c]!==reg) ? thick : thin;
-        cell.style.borderLeft   = (c===0   || puzzle.regionOf[r][c-1]!==reg) ? thick : thin;
-        cell.style.borderRight  = (c===n-1 || puzzle.regionOf[r][c+1]!==reg) ? thick : thin;
-        cell.style.borderBottom = (r===n-1 || puzzle.regionOf[r+1][c]!==reg) ? thick : thin;
+        cell.style.background = REGION_COLORS[puzzle.regionOf[r][c] % REGION_COLORS.length];
         renderCellContent(cell, r, c);
         boardEl.appendChild(cell);
       }
     }
+    boardEl.appendChild(buildGridLines(n));
     attachBoardInput(boardEl);
     measureBoard();
+  }
+
+  /* Grid lines used to be CSS borders on each cell. That looks choppy because
+     neighbouring cells each draw their own edge, so shared lines double up,
+     corners never quite meet, and fractional pixel widths shimmer as the board
+     is resized. Drawing them instead as one SVG layer fixes all three: each
+     line exists exactly once, runs the full length of the boundary, and joins
+     its neighbours with rounded caps. */
+  function buildGridLines(n){
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + n + ' ' + n);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'grid-lines');
+
+    function reg(r, c){ return puzzle.regionOf[r][c]; }
+
+    /* Collect every boundary edge, then merge runs of collinear edges into
+       single long strokes so a straight border is one path, not n segments. */
+    function horizontalRuns(isBoundary){
+      var runs = [];
+      for(var r=0; r<=n; r++){
+        var start = -1;
+        for(var c=0; c<n; c++){
+          var here = isBoundary(r, c);
+          if(here && start < 0) start = c;
+          if((!here || c === n-1) && start >= 0){
+            var end = here ? c + 1 : c;
+            runs.push([start, r, end, r]);
+            start = -1;
+          }
+        }
+      }
+      return runs;
+    }
+    function verticalRuns(isBoundary){
+      var runs = [];
+      for(var c=0; c<=n; c++){
+        var start = -1;
+        for(var r=0; r<n; r++){
+          var here = isBoundary(r, c);
+          if(here && start < 0) start = r;
+          if((!here || r === n-1) && start >= 0){
+            var end = here ? r + 1 : r;
+            runs.push([c, start, c, end]);
+            start = -1;
+          }
+        }
+      }
+      return runs;
+    }
+
+    function addPath(runs, cls){
+      if(!runs.length) return;
+      var d = runs.map(function(s){
+        return 'M' + s[0] + ' ' + s[1] + 'L' + s[2] + ' ' + s[3];
+      }).join('');
+      var p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', cls);
+      svg.appendChild(p);
+    }
+
+    /* faint lines inside a yard - drawn first so yard edges sit on top */
+    addPath(horizontalRuns(function(r, c){
+      return r > 0 && r < n && reg(r-1, c) === reg(r, c);
+    }), 'gl-thin');
+    addPath(verticalRuns(function(r, c){
+      return c > 0 && c < n && reg(r, c-1) === reg(r, c);
+    }), 'gl-thin');
+
+    /* yard boundaries, including the outside edge of the board */
+    addPath(horizontalRuns(function(r, c){
+      return r === 0 || r === n || reg(r-1, c) !== reg(r, c);
+    }), 'gl-thick');
+    addPath(verticalRuns(function(r, c){
+      return c === 0 || c === n || reg(r, c-1) !== reg(r, c);
+    }), 'gl-thick');
+
+    return svg;
   }
   function renderCellContent(cell, r, c){
     var v = board[r][c];
@@ -2361,6 +2429,16 @@
   /* ================= INIT ================= */
   document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
   document.addEventListener('dblclick', function(e){ e.preventDefault(); }, {passive:false});
+
+  /* Registering a service worker is what turns this from a bookmark into an
+     installable app, and it makes the game playable with no signal. */
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(e){
+        console.warn('GoodPups: service worker not registered', e && e.message);
+      });
+    });
+  }
 
   refreshPlayButton();
   refreshProfileUI();
