@@ -579,6 +579,19 @@
      protected by firestore.rules, not by hiding them. Never paste a service
      account key (one containing "private_key") into this file.
      ============================================================ -->
+<script>
+  /* Module scripts are deferred, so they run AFTER classic scripts. The main
+     game script therefore cannot rely on the module having created anything
+     yet. This tiny classic script runs first and publishes the promise, which
+     the module resolves later. Without it the game checks for a backend that
+     does not exist yet and locks itself offline forever. */
+  window.GP_BACKEND = new Promise(function(resolve){
+    window.__gpResolve = resolve;
+    /* if the module never runs at all, don't hang the UI */
+    setTimeout(function(){ resolve(null); }, 20000);
+  });
+</script>
+
 <script type="module">
   const FIREBASE_CONFIG = {
     apiKey:     "AIzaSyB8DrvARE3gUcAaj3mnrDsfOdcxpcA3rpw",
@@ -591,7 +604,7 @@
   window.GP_KEY_SEEN = (FIREBASE_CONFIG.apiKey || '').slice(0, 10) || '(empty)';
   window.GP_PROJ_SEEN = FIREBASE_CONFIG.projectId || '(empty)';
 
-  window.GP_BACKEND = (async function(){
+  (async function(){
     if(!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId){
       window.GP_ERROR = 'config blank in the deployed file';
       return null;
@@ -648,11 +661,13 @@
         return out;
       }
     };
-  })().catch(function(err){
+  })().then(function(backend){
+    if(window.__gpResolve) window.__gpResolve(backend);
+  }).catch(function(err){
     var msg = (err && (err.code || err.message)) ? (err.code || '') + ' ' + (err.message || '') : String(err);
     window.GP_ERROR = msg;
     console.warn("GoodPups: cloud unavailable, staying local.", msg);
-    return null;
+    if(window.__gpResolve) window.__gpResolve(null);
   });
 </script>
 
