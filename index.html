@@ -279,6 +279,11 @@
     overflow:hidden;
     box-shadow:0 6px 0 var(--cream-dark), 0 12px 26px rgba(74,50,34,.18);
   }
+  .board .lines{
+    position:absolute; left:0; top:0;
+    pointer-events:none; z-index:3;
+    shape-rendering:crispEdges;   /* no anti-aliased half pixels */
+  }
   /* Thick yard boundaries. Absolutely positioned bars rather than borders,
      because CSS mitres a thick border into a thin one diagonally and leaves a
      notch at every corner. Each run is one bar with rounded ends that overhang
@@ -1263,15 +1268,20 @@
       head:[31,29], nose:'#2A2A2A', muzzle:'#FFFFFF', brow:'#E8ECEF',
       ear:{shape:'perk', w:12, h:20, y:36, tilt:14}, mark:'mask', eyes:'#6FB6D6' },
 
-    { id:'bully-grey', name:'Grey Bully',
-      coat:['#A9A9A6','#8E8E8B','#727270'], earCol:['#8E8E8B','#6A6A68'],
-      head:[33,28], nose:'#2A2A2A', muzzle:'#BDBDB9', brow:'#7C7C79',
-      ear:{shape:'button', w:10, h:11, y:38, tilt:20}, wideMuzzle:true },
+    /* The lilac-blue coat, amber eyes and matching lilac nose are what people
+       actually mean by a grey American Bully - a flat grey with a black nose
+       reads as a generic dog. Wide skull, wide muzzle, small low rose ears. */
+    { id:'bully-grey', name:'Grey American Bully',
+      coat:['#B0A7A3','#948A86','#78706C'], earCol:['#948A86','#665E5A'],
+      head:[34,28], nose:'#8A7570', muzzle:'#C2B8B3', brow:'#867C78',
+      eyes:'#C08F3C',
+      ear:{shape:'button', w:11, h:10, y:42, tilt:30}, wideMuzzle:true, chestBlaze:true },
 
-    { id:'bully-brown', name:'Brown Bully',
+    { id:'bully-brown', name:'Brown American Bully',
       coat:['#B08258','#946A44','#775332'], earCol:['#946A44','#6B4A2C'],
-      head:[33,28], nose:'#33251A', muzzle:'#C9A379', brow:'#7A5636',
-      ear:{shape:'button', w:10, h:11, y:38, tilt:20}, wideMuzzle:true },
+      head:[34,28], nose:'#6B4A38', muzzle:'#C9A379', brow:'#7A5636',
+      eyes:'#B07E2E',
+      ear:{shape:'button', w:11, h:10, y:42, tilt:30}, wideMuzzle:true, chestBlaze:true },
 
     { id:'greatdane', name:'Great Dane',
       coat:['#C6A075','#A9835C','#8A6845'], earCol:['#8A6845','#6B4E31'],
@@ -1462,7 +1472,11 @@
     s += '<g clip-path="url(#hd' + id + ')">' + markings(b, c, HX, HY, rx, ry) + '</g>';
 
     /* ---- muzzle: short and round on every breed ---- */
-    var mw = b.wideMuzzle ? 19 : 17;
+    var mw = b.wideMuzzle ? 20 : 17;
+    if(b.chestBlaze){
+      /* the white flash that runs up the chest onto the chin */
+      s += '<ellipse cx="50" cy="80" rx="11" ry="9" fill="#F7F3EE" opacity=".95"/>';
+    }
     s += '<ellipse cx="50" cy="66" rx="' + mw + '" ry="13" fill="' + b.muzzle + '"/>';
     if(b.wrinkle){
       s += '<path d="M38 56 q12 -5 24 0" stroke="' + c[2] +
@@ -3157,33 +3171,17 @@
   function renderBoard(){
     var n = puzzle.n, boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
-    /* Lines are inset box-shadows on each cell, not borders and not an
-       overlay. A shadow is a plain rectangle drawn inside the box, so where a
-       thick one meets a thin one they simply overlap and the corner fills in.
-       Borders mitre diagonally (the notches) and an absolute overlay can drift
-       out of step with the grid (the mess). This cannot do either: the line is
-       part of the cell, so it is always exactly on the cell's edge.
-       Each shared edge is drawn by ONE cell - top and left - so nothing
-       doubles up; the last row and column close the frame. */
-    var YARD = 4, THIN = 1.5, YC = '#FFFFFF', TC = 'rgba(255,255,255,0.62)';
+    /* Cells are pure colour and nothing else. Every attempt to make the cell
+       draw its own edges failed for the same reason: two separate elements
+       have to agree on where a boundary is, and browsers round them
+       differently. The lines are drawn once, afterwards, in a single overlay
+       that shares the board's exact pixel grid. */
     for(var r=0;r<n;r++){
       for(var c=0;c<n;c++){
         var cell = document.createElement('div');
         cell.className = 'cell';
         cell.dataset.r = r; cell.dataset.c = c;
-        var reg = puzzle.regionOf[r][c];
-        cell.style.background = REGION_COLORS[reg % REGION_COLORS.length];
-
-        var topYard  = (r === 0) || puzzle.regionOf[r-1][c] !== reg;
-        var leftYard = (c === 0) || puzzle.regionOf[r][c-1] !== reg;
-        var sh = [
-          'inset 0 ' + (topYard ? YARD : THIN) + 'px 0 0 ' + (topYard ? YC : TC),
-          'inset ' + (leftYard ? YARD : THIN) + 'px 0 0 0 ' + (leftYard ? YC : TC)
-        ];
-        if(r === n-1) sh.push('inset 0 -' + YARD + 'px 0 0 ' + YC);
-        if(c === n-1) sh.push('inset -' + YARD + 'px 0 0 0 ' + YC);
-        cell.style.boxShadow = sh.join(', ');
-
+        cell.style.background = REGION_COLORS[puzzle.regionOf[r][c] % REGION_COLORS.length];
         renderCellContent(cell, r, c);
         boardEl.appendChild(cell);
       }
@@ -3191,7 +3189,95 @@
 
     attachBoardInput(boardEl);
     measureBoard();
+    drawLines();
     /* bars need the final cell size, so they are built after measuring */
+  }
+
+  /* THE LINES.
+     A single SVG sized in real pixels with a viewBox to match, so its scale is
+     exactly 1 and a coordinate of 120 is pixel 120 - no fractional scaling, no
+     rounding drift. Every straight run of boundary is one rectangle, so joins
+     are solid by construction rather than by luck.
+
+     This is why the earlier attempts failed:
+       borders  - CSS mitres a thick edge into a thin one, leaving notches
+       shadows  - each cell rounds its own edge independently
+       viewBox 0 0 n n - scaled to fit, so lines landed between pixels
+  */
+  var YARD_W = 4, THIN_W = 2;
+
+  function drawLines(){
+    var boardEl = document.getElementById('board');
+    if(!boardEl || !puzzle) return;
+    var n = puzzle.n, cw = cellPx, size = cw * n;
+
+    var old = boardEl.querySelector('.lines');
+    if(old) old.parentNode.removeChild(old);
+
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'lines');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+
+    function rect(x, y, w, hgt, fill){
+      var e = document.createElementNS(NS, 'rect');
+      e.setAttribute('x', x); e.setAttribute('y', y);
+      e.setAttribute('width', w); e.setAttribute('height', hgt);
+      e.setAttribute('fill', fill);
+      svg.appendChild(e);
+    }
+    function reg(r, c){ return puzzle.regionOf[r][c]; }
+
+    /* thin lines first, so yard edges paint over them */
+    for(var r=1;r<n;r++){
+      for(var c=0;c<n;c++){
+        if(reg(r-1,c) === reg(r,c))
+          rect(c*cw, r*cw - THIN_W/2, cw, THIN_W, 'rgba(255,255,255,0.55)');
+      }
+    }
+    for(var c2=1;c2<n;c2++){
+      for(var r2=0;r2<n;r2++){
+        if(reg(r2,c2-1) === reg(r2,c2))
+          rect(c2*cw - THIN_W/2, r2*cw, THIN_W, cw, 'rgba(255,255,255,0.55)');
+      }
+    }
+
+    /* yard boundaries, merged into full-length runs */
+    var half = YARD_W/2;
+    for(var hr=0; hr<=n; hr++){
+      var start = -1;
+      for(var hc=0; hc<=n; hc++){
+        var isB = hc < n && (hr === 0 || hr === n || reg(hr-1,hc) !== reg(hr,hc));
+        if(isB && start < 0) start = hc;
+        if((!isB || hc === n) && start >= 0){
+          var x = start*cw - half, w = (hc - start)*cw + YARD_W;
+          var y = hr*cw - half;
+          rect(Math.max(0,x), Math.max(0,y),
+               Math.min(w, size - Math.max(0,x)),
+               Math.min(YARD_W, size - Math.max(0,y)), '#FFFFFF');
+          start = -1;
+        }
+      }
+    }
+    for(var vc=0; vc<=n; vc++){
+      var st = -1;
+      for(var vr=0; vr<=n; vr++){
+        var isV = vr < n && (vc === 0 || vc === n || reg(vr,vc-1) !== reg(vr,vc));
+        if(isV && st < 0) st = vr;
+        if((!isV || vr === n) && st >= 0){
+          var yy = st*cw - half, hgt = (vr - st)*cw + YARD_W;
+          var xx = vc*cw - half;
+          rect(Math.max(0,xx), Math.max(0,yy),
+               Math.min(YARD_W, size - Math.max(0,xx)),
+               Math.min(hgt, size - Math.max(0,yy)), '#FFFFFF');
+          st = -1;
+        }
+      }
+    }
+
+    boardEl.appendChild(svg);
   }
 
   function renderCellContent(cell, r, c){
@@ -3232,7 +3318,9 @@
   var cellPx = 0;
 
   function relayoutBoard(){
-    if(puzzle) measureBoard();
+    if(!puzzle) return;
+    measureBoard();
+    drawLines();
   }
 
   var cellPx = 0;
