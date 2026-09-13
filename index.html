@@ -266,43 +266,30 @@
   .heart-slot{transition:opacity .3s ease, filter .3s ease, transform .3s ease;}
   .heart-slot.lost{opacity:.26; filter:grayscale(1); transform:scale(.85);}
 
-  .board-wrap{width:100%; display:flex; justify-content:center; margin-bottom:10px; position:relative;}
+  .board-wrap{width:100%; display:flex; justify-content:center; margin:3px 0 13px; position:relative;}
   /* Grow into the space a portrait phone actually has. The board is sized by
      whichever runs out first - width or the height left after the chrome
      above and below it - so it fills the screen on a tall phone without ever
      pushing the controls off the bottom. */
   .board{
     display:grid;
-    width:min(96vw, 560px, calc(100dvh - 290px));
-    aspect-ratio:1/1;
-    border-radius:20px; overflow:hidden;
-    background:#FFFFFF; padding:4px;
+    gap:2px;                        /* the thin lines inside a yard */
+    background:rgba(255,255,255,.62);
+    position:relative;
+    border-radius:16px;
     box-shadow:0 6px 0 var(--cream-dark), 0 12px 26px rgba(74,50,34,.18);
   }
-  /* older browsers without dvh still get a sensible size */
-  @supports not (height: 100dvh){
-    .board{ width:min(96vw, 560px, calc(100vh - 300px)); }
-  }
+  /* Thick yard boundaries. Absolutely positioned bars rather than borders,
+     because CSS mitres a thick border into a thin one diagonally and leaves a
+     notch at every corner. Each run is one bar with rounded ends that overhang
+     by half its width, so crossings overlap into a clean join. */
+  .yard-lines{position:absolute; inset:0; pointer-events:none; z-index:3;}
+  .yard-lines i{position:absolute; display:block; background:#FFFFFF; border-radius:3px;}
+
   .cell{
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; position:relative; overflow:hidden;
   }
-  .grid-lines{
-    position:absolute; inset:4px;
-    width:calc(100% - 8px); height:calc(100% - 8px);
-    pointer-events:none; z-index:4; overflow:visible;
-  }
-  .grid-lines path{
-    fill:none;
-    stroke-linecap:round;
-    stroke-linejoin:round;
-    vector-effect:non-scaling-stroke;
-  }
-  .grid-lines .gl-thick{stroke:#FFFFFF; stroke-width:5;}
-  .grid-lines .gl-thin{stroke:rgba(255,255,255,0.42); stroke-width:2;}
-  /* The cross has to read instantly as "ruled out" against nine different
-     yard colours. A darker dish plus a stronger white stroke keeps it legible
-     on the pale greens and blues where it was previously washing out. */
   .cell .mark-x{
     position:absolute; inset:13%;
     display:flex; align-items:center; justify-content:center;
@@ -2601,9 +2588,9 @@
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'hidden') snapshotRun();
   });
-  window.addEventListener('resize', function(){ if(puzzle) measureBoard(); });
+  window.addEventListener('resize', function(){ if(puzzle) relayoutBoard(); });
   window.addEventListener('orientationchange', function(){
-    setTimeout(function(){ if(puzzle) measureBoard(); }, 250);
+    setTimeout(function(){ if(puzzle) relayoutBoard(); }, 250);
   });
 
   /* ================= STATE ================= */
@@ -3172,32 +3159,81 @@
 
   function renderBoard(){
     var n = puzzle.n, boardEl = document.getElementById('board');
-    boardEl.style.gridTemplateColumns = 'repeat('+n+', 1fr)';
-    boardEl.style.gridTemplateRows = 'repeat('+n+', 1fr)';
     boardEl.innerHTML = '';
-    /* Each cell paints only its TOP and LEFT edge. Every boundary is therefore
-       drawn exactly once, by exactly one cell, at that cell's own box edge.
-       Nothing can drift out of alignment because there is no second element
-       trying to draw the same line. The outer right and bottom edges come from
-       the board's white padding. */
-    var THICK = 'var(--line-thick)', THIN = 'var(--line-thin)';
+    /* No borders on the cells. Thin lines come from the grid GAP, which the
+       browser lays out perfectly evenly, and thick yard boundaries are drawn
+       afterwards as single continuous bars. Borders could never join cleanly
+       here: CSS mitres a 4px edge into a 1.5px one diagonally, which is what
+       left a notch at every corner. */
     for(var r=0;r<n;r++){
       for(var c=0;c<n;c++){
         var cell = document.createElement('div');
         cell.className = 'cell';
         cell.dataset.r = r; cell.dataset.c = c;
-        var reg = puzzle.regionOf[r][c];
-        cell.style.background = REGION_COLORS[reg % REGION_COLORS.length];
-        var topThick  = (r === 0) || puzzle.regionOf[r-1][c] !== reg;
-        var leftThick = (c === 0) || puzzle.regionOf[r][c-1] !== reg;
-        cell.style.borderTop  = (topThick  ? THICK : THIN);
-        cell.style.borderLeft = (leftThick ? THICK : THIN);
+        cell.style.background = REGION_COLORS[puzzle.regionOf[r][c] % REGION_COLORS.length];
         renderCellContent(cell, r, c);
         boardEl.appendChild(cell);
       }
     }
     attachBoardInput(boardEl);
     measureBoard();
+    /* bars need the final cell size, so they are built after measuring */
+    boardEl.appendChild(buildYardLines(n));
+  }
+
+  /* Thick yard boundaries as absolutely positioned bars at exact pixel
+     coordinates. Runs of collinear boundary are merged into ONE bar, and each
+     bar is rounded and overhangs its ends by half its own width, so where two
+     meet they overlap into a smooth corner instead of butting together. */
+  var GAP = 2, YARD = 4.5;
+
+  function buildYardLines(n){
+    var layer = document.createElement('div');
+    layer.className = 'yard-lines';
+    var step = cellPx + GAP;
+
+    function bar(x, y, w, hgt){
+      var d = document.createElement('i');
+      d.style.left   = x + 'px';
+      d.style.top    = y + 'px';
+      d.style.width  = w + 'px';
+      d.style.height = hgt + 'px';
+      layer.appendChild(d);
+    }
+
+    /* horizontal: boundary above row r, for r = 0..n */
+    for(var r=0; r<=n; r++){
+      var start = -1;
+      for(var c=0; c<=n; c++){
+        var isB = (c < n) && (r === 0 || r === n ||
+                   puzzle.regionOf[r-1][c] !== puzzle.regionOf[r][c]);
+        if(isB && start < 0) start = c;
+        if((!isB || c === n) && start >= 0){
+          var x0 = start * step - GAP/2 - YARD/2;
+          var x1 = c * step - GAP/2 + YARD/2;
+          var y  = r * step - GAP/2 - YARD/2;
+          bar(x0, y, x1 - x0, YARD);
+          start = -1;
+        }
+      }
+    }
+    /* vertical: boundary left of column c, for c = 0..n */
+    for(var c2=0; c2<=n; c2++){
+      var s2 = -1;
+      for(var r2=0; r2<=n; r2++){
+        var isB2 = (r2 < n) && (c2 === 0 || c2 === n ||
+                     puzzle.regionOf[r2][c2-1] !== puzzle.regionOf[r2][c2]);
+        if(isB2 && s2 < 0) s2 = r2;
+        if((!isB2 || r2 === n) && s2 >= 0){
+          var y0 = s2 * step - GAP/2 - YARD/2;
+          var y1 = r2 * step - GAP/2 + YARD/2;
+          var x  = c2 * step - GAP/2 - YARD/2;
+          bar(x, y0, YARD, y1 - y0);
+          s2 = -1;
+        }
+      }
+    }
+    return layer;
   }
 
   function renderCellContent(cell, r, c){
@@ -3235,29 +3271,46 @@
   var lastTapKey=null, lastTapTime=0;
   var boardRect=null, cellSize=0, lastCellR=-1, lastCellC=-1;
 
+  var cellPx = 0;
+
+  function relayoutBoard(){
+    if(!puzzle) return;
+    measureBoard();
+    var el = document.getElementById('board');
+    var old = el.querySelector('.yard-lines');
+    if(old) old.remove();
+    el.appendChild(buildYardLines(puzzle.n));
+  }
+
+
   function measureBoard(){
     var el = document.getElementById('board');
     if(!el || !puzzle) return;
+    var n = puzzle.n;
 
-    /* Round the inner area down to a whole multiple of the grid size. Without
-       this a 7-wide grid inside 440px gives 62.28px cells, and browsers round
-       each one differently - which is exactly the "lines look crooked" report
-       from testers on other phones. Whole-pixel cells make every line land
-       identically on every device. */
+    /* Whole-pixel cells AND a whole-pixel gap, so every line in the grid lands
+       on the same boundary on every device. This is what stops the lines
+       looking uneven on other people's phones. */
     var wrap = el.parentElement;
     var avail = Math.min(wrap.clientWidth || 400, 520);
-    var inner = Math.floor((avail - 8) / puzzle.n) * puzzle.n;
-    if(inner < puzzle.n) inner = puzzle.n;
-    el.style.width  = (inner + 8) + 'px';
-    el.style.height = (inner + 8) + 'px';
+    var frame = YARD;                            // the outer bar sits inside
+    cellPx = Math.floor((avail - GAP*(n-1) - frame) / n);
+    if(cellPx < 8) cellPx = 8;
+    var inner = cellPx * n + GAP * (n-1);
+
+    el.style.gridTemplateColumns = 'repeat(' + n + ', ' + cellPx + 'px)';
+    el.style.gridTemplateRows    = 'repeat(' + n + ', ' + cellPx + 'px)';
+    el.style.width  = inner + 'px';
+    el.style.height = inner + 'px';
 
     boardRect = el.getBoundingClientRect();
-    cellSize = inner / puzzle.n;
+    cellSize = cellPx + GAP;
   }
+
   function cellAt(x, y){
     if(!boardRect || !cellSize) return null;
-    var c = Math.floor((x - boardRect.left - 4) / cellSize);
-    var r = Math.floor((y - boardRect.top  - 4) / cellSize);
+    var c = Math.floor((x - boardRect.left) / cellSize);
+    var r = Math.floor((y - boardRect.top) / cellSize);
     if(r<0 || c<0 || r>=puzzle.n || c>=puzzle.n) return null;
     return {r:r, c:c};
   }
