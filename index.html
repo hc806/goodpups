@@ -271,10 +271,16 @@
      whichever runs out first - width or the height left after the chrome
      above and below it - so it fills the screen on a tall phone without ever
      pushing the controls off the bottom. */
+  /* The outer frame is a BORDER, not part of the line overlay. Drawn in the
+     overlay it sat half outside the board and got sliced off by the rounded
+     corners, so the edge looked thinner than the lines inside it. As a border
+     it is always its full width and follows the corner radius properly. */
   .board{
     display:grid;
     background:#FFFFFF;
     position:relative;
+    border:4px solid #FFFFFF;
+    box-sizing:border-box;
     border-radius:16px;
     overflow:hidden;
     box-shadow:0 6px 0 var(--cream-dark), 0 12px 26px rgba(74,50,34,.18);
@@ -947,7 +953,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260913.223837';
+  var GP_VERSION = '20260913.225212';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -3718,7 +3724,7 @@
        shadows  - each cell rounds its own edge independently
        viewBox 0 0 n n - scaled to fit, so lines landed between pixels
   */
-  var YARD_W = 4, THIN_W = 2;
+  var YARD_W = 4, THIN_W = 2, FRAME = 4;
 
   function drawLines(){
     var boardEl = document.getElementById('board');
@@ -3736,6 +3742,7 @@
     svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
 
     function rect(x, y, w, hgt, fill){
+      if(w <= 0 || hgt <= 0) return;
       var e = document.createElementNS(NS, 'rect');
       e.setAttribute('x', x); e.setAttribute('y', y);
       e.setAttribute('width', w); e.setAttribute('height', hgt);
@@ -3744,7 +3751,7 @@
     }
     function reg(r, c){ return puzzle.regionOf[r][c]; }
 
-    /* thin lines first, so yard edges paint over them */
+    /* thin lines inside a yard */
     for(var r=1;r<n;r++){
       for(var c=0;c<n;c++){
         if(reg(r-1,c) === reg(r,c))
@@ -3758,34 +3765,29 @@
       }
     }
 
-    /* yard boundaries, merged into full-length runs */
+    /* yard boundaries - INTERIOR ONLY. The board's border draws the outside,
+       so nothing here needs clamping and every line keeps its full width. */
     var half = YARD_W/2;
-    for(var hr=0; hr<=n; hr++){
+    for(var hr=1; hr<n; hr++){
       var start = -1;
       for(var hc=0; hc<=n; hc++){
-        var isB = hc < n && (hr === 0 || hr === n || reg(hr-1,hc) !== reg(hr,hc));
+        var isB = hc < n && reg(hr-1,hc) !== reg(hr,hc);
         if(isB && start < 0) start = hc;
         if((!isB || hc === n) && start >= 0){
-          var x = start*cw - half, w = (hc - start)*cw + YARD_W;
-          var y = hr*cw - half;
-          rect(Math.max(0,x), Math.max(0,y),
-               Math.min(w, size - Math.max(0,x)),
-               Math.min(YARD_W, size - Math.max(0,y)), '#FFFFFF');
+          rect(start*cw - half, hr*cw - half,
+               (hc - start)*cw + YARD_W, YARD_W, '#FFFFFF');
           start = -1;
         }
       }
     }
-    for(var vc=0; vc<=n; vc++){
+    for(var vc=1; vc<n; vc++){
       var st = -1;
       for(var vr=0; vr<=n; vr++){
-        var isV = vr < n && (vc === 0 || vc === n || reg(vr,vc-1) !== reg(vr,vc));
+        var isV = vr < n && reg(vr,vc-1) !== reg(vr,vc);
         if(isV && st < 0) st = vr;
         if((!isV || vr === n) && st >= 0){
-          var yy = st*cw - half, hgt = (vr - st)*cw + YARD_W;
-          var xx = vc*cw - half;
-          rect(Math.max(0,xx), Math.max(0,yy),
-               Math.min(YARD_W, size - Math.max(0,xx)),
-               Math.min(hgt, size - Math.max(0,yy)), '#FFFFFF');
+          rect(vc*cw - half, st*cw - half,
+               YARD_W, (vr - st)*cw + YARD_W, '#FFFFFF');
           st = -1;
         }
       }
@@ -3860,7 +3862,7 @@
     avail = Math.min(avail, 520);
     if(avail < 120) return false;
 
-    var px = Math.floor(avail / n);
+    var px = Math.floor((avail - FRAME*2) / n);
     if(px < 8) px = 8;
     if(px === cellPx && el.style.width) return false;   // nothing changed
 
@@ -3868,8 +3870,9 @@
     var inner = cellPx * n;
     el.style.gridTemplateColumns = 'repeat(' + n + ', ' + cellPx + 'px)';
     el.style.gridTemplateRows    = 'repeat(' + n + ', ' + cellPx + 'px)';
-    el.style.width  = inner + 'px';
-    el.style.height = inner + 'px';
+    /* border-box, so the width includes the frame on both sides */
+    el.style.width  = (inner + FRAME*2) + 'px';
+    el.style.height = (inner + FRAME*2) + 'px';
 
     boardRect = el.getBoundingClientRect();
     cellSize = cellPx;
@@ -3896,8 +3899,8 @@
 
   function cellAt(x, y){
     if(!boardRect || !cellSize) return null;
-    var c = Math.floor((x - boardRect.left) / cellSize);
-    var r = Math.floor((y - boardRect.top) / cellSize);
+    var c = Math.floor((x - boardRect.left - FRAME) / cellSize);
+    var r = Math.floor((y - boardRect.top  - FRAME) / cellSize);
     if(r<0 || c<0 || r>=puzzle.n || c>=puzzle.n) return null;
     return {r:r, c:c};
   }
