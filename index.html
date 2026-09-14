@@ -596,7 +596,7 @@
   <section class="screen" id="screen-settings">
     <div class="topbar">
       <button class="icon-btn" id="btn-back-settings">←</button>
-      <div class="screen-title">Settings</div>
+      <div class="screen-title" id="settings-title">Settings</div>
       <div style="width:46px;"></div>
     </div>
     <div class="scroller">
@@ -674,6 +674,45 @@
         <textarea id="backup-box" readonly style="display:none; width:100%; margin-top:10px; height:74px;
           font-size:11px; font-family:monospace; border-radius:10px; border:2px solid var(--cream-dark);
           padding:8px; resize:none; background:#fff; color:var(--brown-dark);"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-admin">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-admin">←</button>
+      <div class="screen-title">Repair</div>
+      <div style="width:46px;"></div>
+    </div>
+    <div class="scroller">
+      <div class="panel">
+        <div class="setting-title" style="margin-bottom:4px;">Restore an account</div>
+        <div class="setting-desc" id="admin-who">—</div>
+        <div style="margin-top:14px;">
+          <label style="font-size:13px;font-weight:800;font-family:'Baloo 2',sans-serif;">Levels completed</label>
+          <input id="admin-levels" type="number" min="0" max="300" inputmode="numeric"
+            style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;
+                   border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-size:13px;font-weight:800;font-family:'Baloo 2',sans-serif;">Stars earned</label>
+          <input id="admin-stars" type="number" min="0" max="900" inputmode="numeric"
+            style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;
+                   border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">
+          <div class="setting-desc" id="admin-star-note" style="margin-top:5px;"></div>
+        </div>
+        <div style="margin-top:16px;">
+          <button class="btn" id="btn-admin-apply">Apply</button>
+          <button class="btn secondary" id="btn-admin-refresh">Read current values</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:14px;">
+        <div class="setting-title" style="margin-bottom:4px;">What this does</div>
+        <div class="setting-desc">
+          Marks levels 1 to N as completed and spreads the stars across them.
+          It does not invent scores beyond that, and it pushes straight to the
+          cloud for the account signed in right now.
+        </div>
       </div>
     </div>
   </section>
@@ -793,6 +832,17 @@
     const auth = getAuth(app);
     const db   = getFirestore(app);
 
+    /* Firebase defaults to local persistence, but set it explicitly and fall
+       back through the options - an installed PWA with IndexedDB unavailable
+       would otherwise silently drop to memory-only and forget the session
+       every time the app closes. */
+    try{
+      const { setPersistence, browserLocalPersistence, indexedDBLocalPersistence }
+        = await import(V + "firebase-auth.js");
+      try{ await setPersistence(auth, indexedDBLocalPersistence); }
+      catch(e1){ await setPersistence(auth, browserLocalPersistence); }
+    }catch(e){ /* keep the default rather than fail the whole connection */ }
+
     /* If we are returning from a Google redirect, settle that first so the
        uid we report is the linked one, not a fresh anonymous account. */
     let redirectInfo = null;
@@ -818,10 +868,32 @@
     }
     window.GP_REDIRECT = redirectInfo;
 
+    /* THIS is why Google sign-in never stuck: signInAnonymously was called on
+       every single load. It does not reuse an existing session - it always
+       creates a BRAND NEW anonymous account and makes it current, throwing
+       away the Google one that was already signed in.
+       So: wait for Firebase to report the stored session first, and only fall
+       back to an anonymous account when there genuinely isn't one. */
     const uid = await new Promise((resolve, reject) => {
-      const stop = onAuthStateChanged(auth, u => { if(u){ stop(); resolve(u.uid); } });
-      signInAnonymously(auth).catch(reject);
-      setTimeout(() => reject(new Error("auth timeout")), 12000);
+      let settled = false;
+      const finish = (id) => { if(!settled){ settled = true; resolve(id); } };
+
+      const stop = onAuthStateChanged(auth, (u) => {
+        if(u){
+          stop();
+          finish(u.user ? u.user.uid : u.uid);
+          return;
+        }
+        /* null means no stored session at all - first run, or signed out */
+        if(!settled){
+          signInAnonymously(auth).then((cred) => {
+            stop();
+            finish(cred.user.uid);
+          }).catch((e) => { if(!settled){ settled = true; reject(e); } });
+        }
+      }, (e) => { if(!settled){ settled = true; reject(e); } });
+
+      setTimeout(() => { if(!settled){ settled = true; reject(new Error("auth timeout")); } }, 12000);
     });
 
     window.GP_STAGE = 'signed in ok';
@@ -953,7 +1025,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260913.225212';
+  var GP_VERSION = '20260914.130101';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -2216,17 +2288,55 @@
   load();
 
   function exportCode(){
-    var payload = JSON.stringify({v:2, progress:progress, settings:settings, profile:profile, hints:hints, reveals:reveals, collection:collection});
-    try{ return btoa(unescape(encodeURIComponent(payload))); }catch(e){ return payload; }
+    var payload = JSON.stringify({
+      v:2, progress:progress, settings:settings, profile:profile,
+      hints:hints, reveals:reveals, collection:collection
+    });
+    try{ return btoa(unescape(encodeURIComponent(payload))); }
+    catch(e){ return payload; }
   }
+
+  /* Backup codes get copied through keyboards, notes apps and messages, and
+     each of those can add a line break or clip the end. So the reader strips
+     whitespace, tries several decodings, and says WHICH part failed instead of
+     a flat "didn't look right". */
   function importCode(code){
-    code = (code||'').trim();
-    if(!code) return false;
-    var text = code;
-    try{ text = decodeURIComponent(escape(atob(code))); }catch(e){}
-    var data; try{ data = JSON.parse(text); }catch(e){ return false; }
-    if(!data || typeof data !== 'object' || !data.progress) return false;
-    applyData(data); save(); return true;
+    var raw = String(code || '');
+    /* kill every kind of whitespace, including the ones a paste can inject */
+    var clean = raw.replace(/[\s\u00a0\u200b-\u200d\uFEFF]+/g, '');
+    if(!clean) return { ok:false, why:'Nothing was pasted.' };
+
+    var text = null;
+
+    /* already plain JSON? */
+    if(clean.charAt(0) === '{'){
+      text = raw.trim();
+    } else {
+      /* base64 - pad it, because some apps trim the trailing = signs */
+      var b64 = clean.replace(/-/g,'+').replace(/_/g,'/');
+      while(b64.length % 4) b64 += '=';
+      var bin = null;
+      try{ bin = atob(b64); }
+      catch(e){ return { ok:false, why:'That does not look like a backup code. Copy the whole thing, including the very end.' }; }
+      try{ text = decodeURIComponent(escape(bin)); }
+      catch(e2){ text = bin; }      /* plain ASCII codes decode fine as-is */
+    }
+
+    var data;
+    try{ data = JSON.parse(text); }
+    catch(e3){
+      return { ok:false, why:'The code is incomplete — it decoded but stopped part way. Copy it again and make sure nothing is cut off.' };
+    }
+    if(!data || typeof data !== 'object' || !data.progress){
+      return { ok:false, why:'That is a valid code but not a GoodPups save.' };
+    }
+
+    var levels = 0;
+    for(var lv in data.progress){ if(data.progress[lv] && data.progress[lv].completed) levels++; }
+
+    applyData(data);
+    save();
+    return { ok:true, levels:levels, name:(data.profile && data.profile.name) || null };
   }
 
   function getPuzzle(levelNum){
@@ -2403,6 +2513,7 @@
         save();
       }
       restoreFromCloud();
+      syncNow(true);
     }, function(){ restoreFromCloud(); });
   }
 
@@ -2458,7 +2569,10 @@
                     created: Date.now() };
         save(); refreshProfileUI();
       }
-      resolveProgressConflict(doc, onDone);
+      resolveProgressConflict(doc, function(){
+        lastSyncAt = Date.now();
+        if(onDone) onDone();
+      });
     }, function(){
       pushScores();
       showToast('Connected — progress is safe now');
@@ -2489,6 +2603,52 @@
       closeOverlay();
       if(onDone) onDone();
     };
+  }
+
+  /* ================= KEEPING DEVICES IN STEP =================
+     Pulling only at launch meant a phone left open all evening never saw what
+     was played on the tablet. This runs on launch AND whenever the app is
+     brought back to the foreground, merging both ways: anything the cloud has
+     that is better comes down, anything this device has that is better goes
+     up. Throttled, so flicking between apps does not hammer the network. */
+  var lastSyncAt = 0, syncing = false;
+  var SYNC_GAP_MS = 20000;
+
+  function syncNow(force){
+    if(!cloud || !profile || !profile.id) return Promise.resolve(false);
+    var now = Date.now();
+    if(syncing) return Promise.resolve(false);
+    if(!force && now - lastSyncAt < SYNC_GAP_MS) return Promise.resolve(false);
+    syncing = true;
+
+    return cloud.topScores(50).then(function(docs){
+      var doc = null;
+      for(var i=0;i<docs.length;i++){ if(docs[i].id === profile.id){ doc = docs[i]; break; } }
+      var theirs = cloudLevelsOf(doc);
+      var mine = localLevels();
+      var merged = mergeLevels(mine, theirs);
+
+      var before = summarise(mine), after = summarise(merged);
+      var gained = after.count - before.count;
+      var improved = after.stars - before.stars;
+
+      if(gained > 0 || improved > 0){
+        adoptLevels(merged);
+        refreshPlayButton();
+        renderLevelGridIfVisible();
+        if(gained > 0){
+          showToast(gained + ' level' + (gained===1?'':'s') + ' synced from your other device');
+        }
+      }
+      /* push regardless: this device may be the one that is ahead */
+      pushScores();
+      lastSyncAt = Date.now();
+      syncing = false;
+      return true;
+    }, function(){
+      syncing = false;
+      return false;
+    });
   }
 
   /* ---- comparing the two saves ---- */
@@ -2861,7 +3021,7 @@
   }
   function fetchLeaderboard(){
     if(cloud){
-      return cloud.topScores(50).then(function(docs){
+      return cloud.topScores(80).then(function(docs){
         var rows = docs.map(function(d){
           var detail = {};
           for(var lv in (d.levels||{})){
@@ -2870,11 +3030,56 @@
           return {id:d.id, name:d.name||'Pup', total:d.total||0, levels:d.count||0,
                   time:d.time||0, perfect:d.perfect||0, detail:detail};
         });
+        rows = dedupeByName(rows);
         rows.sort(sortRows);
         return rows;
       }, localLeaderboard);
     }
     return Promise.resolve(localLeaderboard());
+  }
+
+  /* Why duplicates existed at all:
+     until the auth fix, every launch created a BRAND NEW anonymous account.
+     Finish a level on each and you get several score documents for one human,
+     all carrying the same name. Those records are still in the database and
+     cannot be deleted from here - the rules only let an account write its own.
+     So the board merges them at read time: one row per name, taking the best
+     result on each level. Self-healing, and the old records do no harm. */
+  function dedupeByName(rows){
+    var byName = {};
+    rows.forEach(function(r){
+      var key = normalizeName(r.name);
+      var cur = byName[key];
+      if(!cur){ byName[key] = r; return; }
+
+      /* merge the two records, best score per level */
+      var detail = {};
+      [cur.detail, r.detail].forEach(function(src){
+        for(var lv in src){
+          var e = src[lv], have = detail[lv];
+          if(!have || e.score > have.score ||
+            (e.score === have.score && e.seconds < have.seconds)){
+            detail[lv] = { score:e.score, seconds:e.seconds, perfect: e.perfect || (have && have.perfect) };
+          } else if(have && e.perfect){ have.perfect = true; }
+        }
+      });
+
+      var total = 0, count = 0, time = 0, perfect = 0;
+      for(var lv2 in detail){
+        total += detail[lv2].score; time += detail[lv2].seconds || 0;
+        if(detail[lv2].perfect) perfect++;
+        count++;
+      }
+      /* keep whichever id is mine, so my own row still highlights */
+      var keepId = (profile && (cur.id === profile.id || r.id === profile.id))
+        ? profile.id : cur.id;
+      byName[key] = { id:keepId, name:cur.name, total:total, levels:count,
+                      time:time, perfect:perfect, detail:detail };
+    });
+
+    var out = [];
+    for(var k in byName) out.push(byName[k]);
+    return out;
   }
 
   /* ================= RUN PERSISTENCE ================= */
@@ -2946,7 +3151,14 @@
   window.addEventListener('pagehide', snapshotRun);
   window.addEventListener('beforeunload', snapshotRun);
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'hidden') snapshotRun();
+    if(document.visibilityState === 'hidden'){
+      snapshotRun();
+      return;
+    }
+    /* back in the foreground: re-measure the board, then catch up with
+       anything played on another device while we were away */
+    relayoutBoard();
+    syncNow(false);
   });
   window.addEventListener('resize', function(){ if(puzzle) relayoutBoard(); });
   window.addEventListener('orientationchange', function(){
@@ -3236,28 +3448,22 @@
     var box = document.getElementById('backup-box');
     document.getElementById('btn-backup').onclick = function(){
       var code = exportCode();
-      box.value = code; box.style.display = 'block'; box.select();
-      var copied = false;
-      try{ copied = document.execCommand('copy'); }catch(e){}
-      if(!copied && navigator.clipboard){
+      box.value = code;
+      box.style.display = 'block';
+      /* the box stays on screen either way, so a failed copy is recoverable
+         by long-pressing and selecting all */
+      if(navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(code).then(
-          function(){ showToast('Backup code copied'); },
-          function(){ showToast('Code shown below — copy it'); });
+          function(){ showToast('Backup code copied — paste it on the other device'); },
+          function(){ showToast('Long-press the box below and copy it all'); });
         return;
       }
-      showToast(copied ? 'Backup code copied' : 'Code shown below — copy it');
+      box.select();
+      var copied = false;
+      try{ copied = document.execCommand('copy'); }catch(e){}
+      showToast(copied ? 'Backup code copied' : 'Long-press the box below and copy it all');
     };
-    document.getElementById('btn-restore').onclick = function(){
-      var code = prompt('Paste your backup code:');
-      if(code === null) return;
-      if(importCode(code)){
-        renderLevelGrid(); refreshPlayButton(); refreshProfileUI(); updateHintUI();
-        wireSwitch('sw-autocross','autoCross');
-        wireSwitch('sw-sound','sound');
-        wireSwitch('sw-haptics','haptics');
-        showToast('Progress restored');
-      } else { showToast("That code didn't look right"); }
-    };
+    document.getElementById('btn-restore').onclick = function(){ showRestore(); };
     var gBtn = document.getElementById('btn-google');
     gBtn.onclick = function(){
       if(!cloud){ showToast('Not connected to the cloud yet'); return; }
@@ -4195,6 +4401,7 @@
         });
       } else {
         submitScore(currentLevel, result.score, elapsedSec, result.perfect);
+        lastSyncAt = Date.now();   /* just pushed - no need to pull immediately */
         showWin(stars, result, earnedHelp, wheelsOff);
       }
     }, 380);
@@ -4364,6 +4571,197 @@
       });
     };
   }
+
+  function showRestore(){
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">📥</div>' +
+      '<h2>Restore progress</h2>' +
+      '<p>Paste a backup code from another device.</p>' +
+      '<textarea id="restore-box" placeholder="Paste the whole code here" ' +
+        'style="width:100%; height:110px; font-size:12px; font-family:monospace; ' +
+        'border-radius:12px; border:2.5px solid var(--cream-dark); padding:10px; ' +
+        'resize:none; background:#fff; color:var(--brown-dark); outline:none;"></textarea>' +
+      '<div id="restore-msg" style="min-height:34px; font-size:12.5px; font-weight:700; ' +
+        'margin:6px 0 10px; color:var(--danger); line-height:1.4;">&nbsp;</div>' +
+      '<button class="btn" id="btn-restore-go">Restore</button>' +
+      '<button class="btn secondary" id="btn-restore-paste">Paste from clipboard</button>' +
+      '<button class="btn secondary" id="btn-restore-cancel">Cancel</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    var box = document.getElementById('restore-box');
+    var msg = document.getElementById('restore-msg');
+
+    document.getElementById('btn-restore-paste').onclick = function(){
+      if(!navigator.clipboard || !navigator.clipboard.readText){
+        msg.textContent = 'This browser will not let the game read the clipboard — long-press the box and choose Paste.';
+        return;
+      }
+      navigator.clipboard.readText().then(function(t){
+        box.value = t || '';
+        msg.textContent = t ? '' : 'Clipboard was empty.';
+      }, function(){
+        msg.textContent = 'Could not read the clipboard — long-press the box and choose Paste.';
+      });
+    };
+
+    document.getElementById('btn-restore-go').onclick = function(){
+      var res = importCode(box.value);
+      if(!res.ok){ msg.textContent = res.why; HAPTIC.wrong(); return; }
+      renderLevelGrid(); refreshPlayButton(); refreshProfileUI(); updateHintUI();
+      wireSwitch('sw-autocross','autoCross');
+      wireSwitch('sw-sound','sound');
+      wireSwitch('sw-haptics','haptics');
+      closeOverlay();
+      SFX.win(); HAPTIC.correct();
+      showToast('Restored ' + res.levels + ' level' + (res.levels===1?'':'s') +
+                (res.name ? ' for ' + res.name : ''));
+      if(cloud) pushScores();
+    };
+    document.getElementById('btn-restore-cancel').onclick = closeOverlay;
+
+    setTimeout(function(){ try{ box.focus(); }catch(e){} }, 250);
+  }
+
+  /* ================= REPAIR (hidden) =================
+     Eight taps on the Settings title, then a password. This exists to put
+     back progress that was lost to the duplicate-account bug, so it writes
+     straight to the signed-in account rather than only this device. */
+  var ADMIN_PASS = 'chanFam';
+  var titleTaps = 0, titleTapAt = 0, adminUnlocked = false;
+
+  (function wireSecretTap(){
+    var t = document.getElementById('settings-title');
+    if(!t) return;
+    t.addEventListener('click', function(){
+      var now = Date.now();
+      /* taps must be a deliberate run, not eight over a minute */
+      if(now - titleTapAt > 1200) titleTaps = 0;
+      titleTapAt = now;
+      titleTaps++;
+      if(titleTaps >= 8){
+        titleTaps = 0;
+        askAdminPassword();
+      } else if(titleTaps >= 5){
+        showToast((8 - titleTaps) + ' more');
+      }
+    });
+  })();
+
+  function askAdminPassword(){
+    if(adminUnlocked){ openAdmin(); return; }
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🔧</div>' +
+      '<h2>Repair tools</h2>' +
+      '<p>Enter the password.</p>' +
+      '<input id="admin-pass" type="password" autocomplete="off" ' +
+        'style="width:100%;padding:13px 14px;font-size:16px;text-align:center;' +
+        'border-radius:14px;border:2.5px solid var(--cream-dark);background:#fff;' +
+        'color:var(--brown-dark);outline:none;margin-bottom:12px;">' +
+      '<button class="btn" id="btn-admin-go">Unlock</button>' +
+      '<button class="btn secondary" id="btn-admin-cancel">Cancel</button>';
+    document.getElementById('overlay').classList.add('active');
+    var inp = document.getElementById('admin-pass');
+    function tryPass(){
+      if(inp.value === ADMIN_PASS){
+        adminUnlocked = true;
+        closeOverlay();
+        openAdmin();
+      } else {
+        inp.value = '';
+        HAPTIC.wrong();
+        showToast('Wrong password');
+      }
+    }
+    document.getElementById('btn-admin-go').onclick = tryPass;
+    inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryPass(); });
+    document.getElementById('btn-admin-cancel').onclick = closeOverlay;
+    setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 250);
+  }
+
+  function openAdmin(){
+    readAdminValues();
+    showScreen('screen-admin');
+  }
+
+  function readAdminValues(){
+    var s = summarise(localLevels());
+    document.getElementById('admin-levels').value = s.count;
+    document.getElementById('admin-stars').value = s.stars;
+    document.getElementById('admin-who').innerHTML =
+      (profile && profile.name ? 'Account: <b>' + escapeHtml(profile.name) + '</b>' : 'No player name set') +
+      '<br>' + (cloud && cloud.isGoogleLinked && cloud.isGoogleLinked()
+        ? 'Google connected — changes go to the cloud'
+        : 'Not connected to Google — changes stay on this device');
+    updateStarNote();
+  }
+
+  function updateStarNote(){
+    var lv = parseInt(document.getElementById('admin-levels').value, 10) || 0;
+    var st = parseInt(document.getElementById('admin-stars').value, 10) || 0;
+    var note = document.getElementById('admin-star-note');
+    if(!note) return;
+    var min = lv, max = lv * 3;
+    if(st < min || st > max){
+      note.innerHTML = '<span style="color:var(--danger);font-weight:800;">' +
+        lv + ' levels can hold ' + min + '–' + max + ' stars.</span>';
+    } else {
+      note.textContent = 'Fits: ' + lv + ' levels, ' + st + ' stars.';
+    }
+  }
+
+  /* Spreads the stars over the levels as evenly as the 1-3 range allows, then
+     writes scores that genuinely produce those star ratings - so the Kennel
+     and the leaderboard both agree with what was entered. */
+  function applyAdmin(){
+    var lv = Math.max(0, Math.min(TOTAL_LEVELS, parseInt(document.getElementById('admin-levels').value,10) || 0));
+    var st = Math.max(0, parseInt(document.getElementById('admin-stars').value,10) || 0);
+    if(lv === 0){
+      if(!confirm('Set this account to zero completed levels?')) return;
+    }
+    var min = lv, max = lv * 3;
+    if(lv > 0 && (st < min || st > max)){
+      showToast(lv + ' levels can only hold ' + min + '–' + max + ' stars');
+      HAPTIC.wrong();
+      return;
+    }
+
+    var each = lv ? Math.floor(st / lv) : 0;
+    var extra = lv ? st - each * lv : 0;
+
+    progress = {};
+    for(var i=1;i<=lv;i++){
+      var stars = each + (i <= extra ? 1 : 0);
+      if(stars < 1) stars = 1;
+      if(stars > 3) stars = 3;
+      var score = stars === 3 ? 1000 : stars === 2 ? 850 : 400;
+      progress[i] = { completed:true, stars:stars, best:score, bestTime:60, perfect:stars===3 };
+    }
+    activeRun = {};
+    lastAttemptedLevel = null;
+    save();
+
+    /* rebuild the leaderboard card so the cloud matches */
+    if(profile && profile.id){
+      var lb = readLeaderboard();
+      lb[profile.id] = { name: profile.name, levels: {} };
+      for(var j=1;j<=lv;j++){
+        lb[profile.id].levels[j] = { score: progress[j].best, seconds: 60, perfect: progress[j].perfect };
+      }
+      writeLeaderboard(lb);
+      pushScores();
+    }
+
+    refreshPlayButton(); renderLevelGridIfVisible(); updateHintUI();
+    readAdminValues();
+    SFX.win();
+    showToast('Set to ' + lv + ' levels and ' + summarise(localLevels()).stars + ' stars');
+  }
+
+  document.getElementById('btn-back-admin').onclick = function(){ showScreen('screen-settings'); };
+  document.getElementById('btn-admin-apply').onclick = applyAdmin;
+  document.getElementById('btn-admin-refresh').onclick = readAdminValues;
+  document.getElementById('admin-levels').addEventListener('input', updateStarNote);
+  document.getElementById('admin-stars').addEventListener('input', updateStarNote);
 
   function showRules(){
     document.getElementById('modal').innerHTML =
