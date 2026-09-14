@@ -583,12 +583,19 @@
   <section class="screen" id="screen-leaderboard">
     <div class="topbar">
       <button class="icon-btn" id="btn-back-lb">←</button>
-      <div class="screen-title">Leaderboard</div>
+      <div class="screen-title" id="lb-title">Leaderboard</div>
       <div style="width:46px;"></div>
     </div>
     <div class="lb-tabs">
       <button class="lb-tab active" id="tab-total">Total score</button>
       <button class="lb-tab" id="tab-levels">Best per level</button>
+    </div>
+    <div id="lb-admin-bar" style="display:none; width:100%; margin-bottom:10px; padding:9px 12px;
+         border-radius:14px; background:#FBE3D8; border:2px solid #E8654A;
+         font-size:12.5px; font-weight:700; color:#8A2F1C; line-height:1.4;">
+      Admin mode — double tap a player to edit.
+      <button id="btn-lb-admin-off" style="float:right; background:none; border:none;
+        font-weight:800; color:#8A2F1C; text-decoration:underline; cursor:pointer;">exit</button>
     </div>
     <div class="scroller" id="lb-body"></div>
   </section>
@@ -972,6 +979,28 @@
         const snap = await getDoc(doc(db, "players", getAuth(app).currentUser.uid));
         return snap.exists() ? snap.data() : null;
       },
+      /* Admin writes. These target OTHER accounts, so Firestore will refuse
+         them unless firestore.rules names this uid as an admin. The UI shows
+         the uid so it can be pasted into the rules. */
+      async adminSetScores(targetUid, payload){
+        await setDoc(doc(db, "scores", targetUid), payload, { merge: false });
+      },
+      async adminSetName(targetUid, name, key, oldKey){
+        await setDoc(doc(db, "players", targetUid), { name, key }, { merge: true });
+        await setDoc(doc(db, "usernames", key), { uid: targetUid });
+        if(oldKey && oldKey !== key){
+          try{ await deleteDoc(doc(db, "usernames", oldKey)); }catch(e){}
+        }
+        const snap = await getDoc(doc(db, "scores", targetUid));
+        if(snap.exists()) await setDoc(doc(db, "scores", targetUid), { name }, { merge: true });
+      },
+      /* Soft delete: the record stays, flagged so the board skips it. Nothing
+         is destroyed, so it can be brought back. Note this still WRITES to
+         that player's document, so the same rule applies as any other admin
+         edit - your account has to be allowed to touch it. */
+      async adminSetHidden(targetUid, hidden){
+        await setDoc(doc(db, "scores", targetUid), { hidden: !!hidden }, { merge: true });
+      },
       async signOut(){
         const { signOut } = await import(V + "firebase-auth.js");
         await signOut(getAuth(app));
@@ -1025,7 +1054,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260914.130101';
+  var GP_VERSION = '20260914.140646';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -2708,22 +2737,91 @@
     save();
   }
 
-  function mergeLevels(a, b){
-    var out = {};
-    [a, b].forEach(function(src){
-      for(var lv in src){
-        var e = src[lv], cur = out[lv];
-        if(!cur || e.score > cur.score){
-          out[lv] = { score:e.score, seconds:e.seconds || 0, perfect: !!e.perfect || (cur && cur.perfect) };
-        } else if(cur && e.perfect){ cur.perfect = true; }
+  /* rule: 'best' | 'a' | 'b' - which side wins a level that exists on both.
+     Levels only one side has are always kept, whatever the rule. */
+  function mergeLevels(a, b, rule){
+    rule = rule || 'best';
+    var out = {}, lv;
+    for(lv in a) out[lv] = { score:a[lv].score, seconds:a[lv].seconds || 0, perfect:!!a[lv].perfect };
+    for(lv in b){
+      var e = b[lv], cur = out[lv];
+      if(!cur){
+        out[lv] = { score:e.score, seconds:e.seconds || 0, perfect:!!e.perfect };
+        continue;
       }
-    });
+      var takeB =
+        rule === 'b' ? true :
+        rule === 'a' ? false :
+        (e.score > cur.score || (e.score === cur.score && (e.seconds||0) < (cur.seconds||0)));
+      if(takeB){
+        out[lv] = { score:e.score, seconds:e.seconds || 0, perfect: !!e.perfect || cur.perfect };
+      } else {
+        cur.perfect = cur.perfect || !!e.perfect;
+      }
+    }
     return out;
+  }
+
+  /* how many levels exist on both sides, and how many of those disagree */
+  function overlapInfo(a, b){
+    var both = 0, differ = 0;
+    for(var lv in a){
+      if(!b[lv]) continue;
+      both++;
+      if(a[lv].score !== b[lv].score) differ++;
+    }
+    return { both:both, differ:differ };
   }
 
   /* Asked only when BOTH sides have progress and they differ. If one side is
      empty there is nothing to decide, so we just take the other silently -
      a dialog with an obvious answer is noise. */
+  /* Combining is only ambiguous where a level exists on BOTH sides with
+     different scores. That is the one thing worth asking about, so it is
+     asked plainly, with the number of levels affected. */
+  function askMergeRule(mine, theirs, ov, finish, reopen){
+    var best  = mergeLevels(mine, theirs, 'best');
+    var local = mergeLevels(mine, theirs, 'a');
+    var cloudW= mergeLevels(mine, theirs, 'b');
+    var sb = summarise(best), sl = summarise(local), sc = summarise(cloudW);
+
+    function row(id, title, sub, s){
+      return '<button class="btn secondary" id="' + id + '" ' +
+             'style="flex-direction:column; align-items:flex-start; gap:1px; padding:12px 16px;">' +
+             '<span style="font-size:16px;">' + title + '</span>' +
+             '<span class="sub" style="opacity:.8;">' + sub +
+             ' · ★' + s.stars + '</span></button>';
+    }
+
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">⚖️</div>' +
+      '<h2>Which scores win?</h2>' +
+      '<p>All ' + summarise(best).count + ' levels are kept either way. ' +
+      '<b>' + ov.differ + '</b> level' + (ov.differ===1?'':'s') +
+      ' appear on both with a different score — pick which to keep for those.</p>' +
+      row('btn-mr-best',  'Keep the better score', 'recommended', sb) +
+      row('btn-mr-local', 'Use this phone\'s scores', 'overwrites those in your account', sl) +
+      row('btn-mr-cloud', 'Use my account\'s scores', 'overwrites those on this phone', sc) +
+      '<button class="btn secondary" id="btn-mr-cancel" style="margin-top:6px;">Back</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('btn-mr-best').onclick = function(){
+      finish(best, 'Combined — best of each · ★' + sb.stars);
+    };
+    document.getElementById('btn-mr-local').onclick = function(){
+      finish(local, 'Combined — this phone won ties · ★' + sl.stars);
+    };
+    document.getElementById('btn-mr-cloud').onclick = function(){
+      finish(cloudW, 'Combined — your account won ties · ★' + sc.stars);
+    };
+    document.getElementById('btn-mr-cancel').onclick = function(){
+      /* hand control back to the screen that opened this, rather than
+         restarting the comparison with no cloud data */
+      if(reopen) reopen();
+      else closeOverlay();
+    };
+  }
+
   function resolveProgressConflict(cloudDoc, onDone){
     var mine = localLevels();
     var theirs = cloudLevelsOf(cloudDoc);
@@ -2761,10 +2859,10 @@
       '<p>This phone and your Google account each have a save. Which should GoodPups keep?</p>' +
       card('On this phone', ms, escapeHtml(mineName)) +
       card('In your Google account', ts, escapeHtml(theirName)) +
-      '<button class="btn" id="btn-pc-merge">Combine both</button>' +
+      '<button class="btn" id="btn-pc-merge">Combine both<span class="sub">keeps every level from both</span></button>' +
       '<button class="btn secondary" id="btn-pc-local">Keep this phone\'s</button>' +
       '<button class="btn secondary" id="btn-pc-cloud">Keep my account\'s</button>' +
-      '<p style="font-size:11.5px;opacity:.7;margin-top:4px;">Combining keeps the better result on every level, so nothing is lost.</p>';
+      '<p style="font-size:11.5px;opacity:.7;margin-top:4px;">Combining never loses a level. If any level is on both with different scores, you choose which to keep.</p>';
     document.getElementById('overlay').classList.add('active');
 
     function finish(levels, msg){
@@ -2779,8 +2877,17 @@
       if(onDone) onDone();
     }
     document.getElementById('btn-pc-merge').onclick = function(){
-      var m = mergeLevels(mine, theirs);
-      finish(m, 'Combined — ' + summarise(m).count + ' levels');
+      var ov = overlapInfo(mine, theirs);
+      /* If no level appears on both sides, or they all agree, there is nothing
+         to decide - combining is unambiguous, so don't ask. */
+      if(ov.differ === 0){
+        var m = mergeLevels(mine, theirs, 'best');
+        finish(m, 'Combined — ' + summarise(m).count + ' levels');
+        return;
+      }
+      askMergeRule(mine, theirs, ov, finish, function(){
+        resolveProgressConflict(cloudDoc, onDone);
+      });
     };
     document.getElementById('btn-pc-local').onclick = function(){
       if(!confirm('Replace your account\'s save with this phone\'s?\n\nThe ' + ts.count +
@@ -3759,6 +3866,267 @@
     document.getElementById('btn-wear-cancel').onclick = closeOverlay;
   }
 
+  /* Hidden players.
+     The flag belongs on the player's own record so every device honours it -
+     but writing there needs the rules to allow it. When that write is refused
+     we fall back to a list kept on this device, so hiding still works here
+     immediately. The two are checked together when building the board. */
+  var HIDDEN_KEY = 'goodpups_hidden_v1';
+  function readHidden(){
+    if(!STORAGE_OK) return {};
+    try{ var r = localStorage.getItem(HIDDEN_KEY); return r ? JSON.parse(r) : {}; }
+    catch(e){ return {}; }
+  }
+  function writeHidden(map){
+    if(!STORAGE_OK) return;
+    try{ localStorage.setItem(HIDDEN_KEY, JSON.stringify(map)); }catch(e){}
+  }
+  function isHiddenLocally(id){ return !!readHidden()[id]; }
+  function setHiddenLocally(id, on){
+    var m = readHidden();
+    if(on) m[id] = true; else delete m[id];
+    writeHidden(m);
+  }
+
+  /* ================= LEADERBOARD ADMIN =================
+     Eight taps on the title, then the same password. Admin mode lasts until
+     you leave the screen. Every write here targets somebody else's records,
+     which Firestore refuses unless this account is named as an admin in
+     firestore.rules - the repair panel shows the id to paste in. */
+  var lbAdmin = false, lbTaps = 0, lbTapAt = 0, lbLastTap = { id:null, at:0 };
+
+  (function wireLbTap(){
+    var t = document.getElementById('lb-title');
+    if(!t) return;
+    t.addEventListener('click', function(){
+      if(lbAdmin) return;
+      var now = Date.now();
+      if(now - lbTapAt > 1200) lbTaps = 0;
+      lbTapAt = now; lbTaps++;
+      if(lbTaps >= 8){
+        lbTaps = 0;
+        askPassword('Leaderboard admin', function(){
+          lbAdmin = true;
+          document.getElementById('lb-admin-bar').style.display = 'block';
+          renderLeaderboard();
+          showToast('Admin mode on');
+        });
+      } else if(lbTaps >= 5){ showToast((8 - lbTaps) + ' more'); }
+    });
+  })();
+
+  function exitLbAdmin(){
+    lbAdmin = false; lbTaps = 0;
+    var bar = document.getElementById('lb-admin-bar');
+    if(bar) bar.style.display = 'none';
+    renderLeaderboard();
+  }
+
+  /* one password prompt, reused by both admin entry points */
+  function askPassword(title, onOk){
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🔧</div>' +
+      '<h2>' + escapeHtml(title) + '</h2>' +
+      '<p>Enter the password.</p>' +
+      '<input id="pw-input" type="password" autocomplete="off" ' +
+        'style="width:100%;padding:13px 14px;font-size:16px;text-align:center;' +
+        'border-radius:14px;border:2.5px solid var(--cream-dark);background:#fff;' +
+        'color:var(--brown-dark);outline:none;margin-bottom:12px;">' +
+      '<button class="btn" id="pw-go">Unlock</button>' +
+      '<button class="btn secondary" id="pw-cancel">Cancel</button>';
+    document.getElementById('overlay').classList.add('active');
+    var inp = document.getElementById('pw-input');
+    function go(){
+      if(inp.value === ADMIN_PASS){ inp.value=''; closeOverlay(); onOk(); }
+      else { inp.value=''; HAPTIC.wrong(); showToast('Wrong password'); }
+    }
+    document.getElementById('pw-go').onclick = go;
+    inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
+    document.getElementById('pw-cancel').onclick = closeOverlay;
+    setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 250);
+  }
+
+  function lbRowTapped(row){
+    if(!lbAdmin) return;
+    var now = Date.now();
+    if(lbLastTap.id === row.id && now - lbLastTap.at < DOUBLE_TAP_MS){
+      lbLastTap = { id:null, at:0 };
+      editPlayer(row);
+    } else {
+      lbLastTap = { id:row.id, at:now };
+    }
+  }
+
+  function editPlayer(row){
+    var s = summarise(row.detail || {});
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">👤</div>' +
+      '<h2>' + escapeHtml(row.name) + '</h2>' +
+      '<div class="panel" style="text-align:left;font-size:13px;margin-bottom:14px;">' +
+        s.count + ' levels · ★' + s.stars + ' · ' + row.total + ' points' +
+        '<br><span style="opacity:.6;font-size:11px;word-break:break-all;">' +
+        escapeHtml(row.id) + '</span></div>' +
+      '<button class="btn" id="ep-levels">Levels &amp; stars</button>' +
+      '<button class="btn secondary" id="ep-name">Change name</button>' +
+      '<button class="btn secondary" id="ep-delete" ' +
+        'style="background:linear-gradient(180deg,#E8654A,#D64320);color:#fff;' +
+        'box-shadow:0 5px 0 #A33418;">Delete player</button>' +
+      '<button class="btn secondary" id="ep-cancel">Close</button>';
+    document.getElementById('overlay').classList.add('active');
+    document.getElementById('ep-levels').onclick = function(){ editPlayerLevels(row); };
+    document.getElementById('ep-name').onclick   = function(){ editPlayerName(row); };
+    document.getElementById('ep-delete').onclick = function(){ deletePlayer(row, 1); };
+    document.getElementById('ep-cancel').onclick = closeOverlay;
+  }
+
+  /* ---- levels & stars: one confirmation ---- */
+  function editPlayerLevels(row){
+    var s = summarise(row.detail || {});
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">📊</div>' +
+      '<h2>' + escapeHtml(row.name) + '</h2>' +
+      '<div style="text-align:left;margin-bottom:10px;">' +
+        '<label style="font-size:13px;font-weight:800;font-family:\'Baloo 2\',sans-serif;">Levels completed</label>' +
+        '<input id="ep-lv" type="number" min="0" max="' + TOTAL_LEVELS + '" inputmode="numeric" value="' + s.count + '" ' +
+        'style="width:100%;padding:12px;margin:5px 0 10px;font-size:16px;border-radius:12px;' +
+        'border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">' +
+        '<label style="font-size:13px;font-weight:800;font-family:\'Baloo 2\',sans-serif;">Stars</label>' +
+        '<input id="ep-st" type="number" min="0" max="900" inputmode="numeric" value="' + s.stars + '" ' +
+        'style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;' +
+        'border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">' +
+      '</div>' +
+      '<div id="ep-note" style="min-height:20px;font-size:12px;font-weight:700;color:var(--danger);margin-bottom:10px;"></div>' +
+      '<button class="btn" id="ep-lv-save">Save</button>' +
+      '<button class="btn secondary" id="ep-lv-back">Back</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('ep-lv-back').onclick = function(){ editPlayer(row); };
+    document.getElementById('ep-lv-save').onclick = function(){
+      var lv = Math.max(0, Math.min(TOTAL_LEVELS, parseInt(document.getElementById('ep-lv').value,10)||0));
+      var st = Math.max(0, parseInt(document.getElementById('ep-st').value,10)||0);
+      if(lv > 0 && (st < lv || st > lv*3)){
+        document.getElementById('ep-note').textContent = lv + ' levels hold ' + lv + '–' + (lv*3) + ' stars.';
+        HAPTIC.wrong(); return;
+      }
+      if(!confirm('Set ' + row.name + ' to ' + lv + ' levels and ' + st + ' stars?')) return;
+      applyAdminTo(row, lv, st);
+    };
+  }
+
+  function buildLevels(lv, st){
+    var each = lv ? Math.floor(st/lv) : 0, extra = lv ? st - each*lv : 0, out = {};
+    for(var i=1;i<=lv;i++){
+      var stars = each + (i <= extra ? 1 : 0);
+      if(stars < 1) stars = 1; if(stars > 3) stars = 3;
+      out[i] = { s: stars===3?1000:stars===2?850:400, t:60, p: stars===3 };
+    }
+    return out;
+  }
+
+  function applyAdminTo(row, lv, st){
+    var levels = buildLevels(lv, st);
+    var total = 0, perfect = 0, count = 0, time = 0;
+    for(var k in levels){ total += levels[k].s; time += levels[k].t; if(levels[k].p) perfect++; count++; }
+    var payload = { name: row.name, total: total, perfect: perfect,
+                    count: count, time: time, levels: levels };
+
+    if(row.id === (profile && profile.id)){
+      /* editing yourself - go through the normal local path too */
+      progress = {};
+      for(var i2=1;i2<=lv;i2++){
+        var stars = starsForScore(levels[i2].s);
+        progress[i2] = { completed:true, stars:stars, best:levels[i2].s, bestTime:60, perfect:levels[i2].p };
+      }
+      save(); refreshPlayButton(); renderLevelGridIfVisible();
+    }
+
+    if(!cloud || !cloud.adminSetScores){
+      closeOverlay(); showToast('Not connected — cloud unchanged'); return;
+    }
+    cloud.adminSetScores(row.id, payload).then(function(){
+      closeOverlay(); renderLeaderboard();
+      SFX.win(); showToast(row.name + ' set to ' + lv + ' levels, ★' + st);
+    }, function(err){
+      closeOverlay();
+      showToast(adminError(err));
+    });
+  }
+
+  /* ---- rename: two confirmations ---- */
+  function editPlayerName(row){
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">🏷️</div>' +
+      '<h2>Rename ' + escapeHtml(row.name) + '</h2>' +
+      '<input id="ep-name-in" type="text" maxlength="' + NAME_MAX + '" value="' + escapeHtml(row.name) + '" ' +
+        'style="width:100%;padding:13px 14px;font-size:17px;text-align:center;font-weight:700;' +
+        'font-family:\'Baloo 2\',sans-serif;border-radius:14px;border:2.5px solid var(--cream-dark);' +
+        'background:#fff;color:var(--brown-dark);outline:none;margin-bottom:6px;">' +
+      '<div id="ep-name-note" style="min-height:20px;font-size:12px;font-weight:700;color:var(--danger);margin-bottom:10px;"></div>' +
+      '<button class="btn" id="ep-name-save">Rename</button>' +
+      '<button class="btn secondary" id="ep-name-back">Back</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('ep-name-back').onclick = function(){ editPlayer(row); };
+    document.getElementById('ep-name-save').onclick = function(){
+      var v = validateName(document.getElementById('ep-name-in').value);
+      if(!v.ok){ document.getElementById('ep-name-note').textContent = v.reason; HAPTIC.wrong(); return; }
+      if(v.name === row.name){ showToast('That is already the name'); return; }
+      /* first confirmation */
+      if(!confirm('Rename "' + row.name + '" to "' + v.name + '"?')) return;
+      /* second confirmation - renaming moves the name registration too */
+      if(!confirm('Are you sure?\n\nThis frees up "' + row.name + '" and claims "' + v.name +
+                  '" for this player. It cannot be undone from here.')) return;
+      applyRename(row, v.name);
+    };
+  }
+
+  function applyRename(row, newName){
+    if(!cloud || !cloud.adminSetName){
+      closeOverlay(); showToast('Not connected — cloud unchanged'); return;
+    }
+    var oldKey = normalizeName(row.name), key = normalizeName(newName);
+    cloud.adminSetName(row.id, newName, key, oldKey).then(function(){
+      if(row.id === (profile && profile.id)){
+        profile.name = newName; profile.key = key; save(); refreshProfileUI();
+      }
+      closeOverlay(); renderLeaderboard();
+      showToast('Renamed to ' + newName);
+    }, function(err){
+      closeOverlay(); showToast(adminError(err));
+    });
+  }
+
+  /* ---- delete: three confirmations ---- */
+  function deletePlayer(row, step){
+    var prompts = [
+      'Delete "' + row.name + '"?\n\nEvery level, star and score for this player will be removed.',
+      'Are you sure?\n\nThis cannot be undone. "' + row.name + '" will vanish from the leaderboard.',
+      'Last chance.\n\nType-free final check: really delete "' + row.name + '" permanently?'
+    ];
+    for(var i=0;i<3;i++){
+      if(!confirm(prompts[i])) { showToast('Cancelled'); return; }
+    }
+    if(!cloud || !cloud.adminDelete){
+      closeOverlay(); showToast('Not connected — cloud unchanged'); return;
+    }
+    cloud.adminDelete(row.id, normalizeName(row.name)).then(function(){
+      var lb = readLeaderboard();
+      if(lb[row.id]){ delete lb[row.id]; writeLeaderboard(lb); }
+      closeOverlay(); renderLeaderboard();
+      showToast(row.name + ' deleted');
+    }, function(err){
+      closeOverlay(); showToast(adminError(err));
+    });
+  }
+
+  function adminError(err){
+    var code = (err && err.code) || '';
+    if(code.indexOf('permission') !== -1){
+      return 'Refused — add your id as an admin in firestore.rules';
+    }
+    return 'Failed: ' + (code || 'unknown');
+  }
+
   /* ================= LEADERBOARD SCREEN ================= */
   var lbMode = 'total';
   function renderLeaderboard(){
@@ -3776,7 +4144,8 @@
       if(lbMode === 'total'){
         rows.forEach(function(row, i){
           var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
-          html += '<div class="lb-row' + (row.id===myId?' me':'') + '">' +
+          html += '<div class="lb-row' + (row.id===myId?' me':'') + '"' +
+            (lbAdmin ? ' data-lbid="' + escapeHtml(row.id) + '" style="cursor:pointer;"' : '') + '>' +
             '<div class="lb-rank">' + medal + '</div>' +
             '<div style="flex:1; min-width:0;">' +
               '<div class="lb-name">' + escapeHtml(row.name) + '</div>' +
@@ -3810,6 +4179,17 @@
         });
       }
       body.innerHTML = html;
+
+      if(lbAdmin){
+        var map = {};
+        rows.forEach(function(r){ map[r.id] = r; });
+        body.querySelectorAll('[data-lbid]').forEach(function(el){
+          el.addEventListener('click', function(){
+            var r = map[el.getAttribute('data-lbid')];
+            if(r) lbRowTapped(r);
+          });
+        });
+      }
     });
   }
 
@@ -4627,7 +5007,7 @@
      back progress that was lost to the duplicate-account bug, so it writes
      straight to the signed-in account rather than only this device. */
   var ADMIN_PASS = 'chanFam';
-  var titleTaps = 0, titleTapAt = 0, adminUnlocked = false;
+  var titleTaps = 0, titleTapAt = 0;
 
   (function wireSecretTap(){
     var t = document.getElementById('settings-title');
@@ -4647,35 +5027,11 @@
     });
   })();
 
+  /* Asked every single time. There is deliberately no "unlocked" flag: this
+     writes directly to a player's account, so it should never be one tap away
+     just because it was opened earlier in the session. */
   function askAdminPassword(){
-    if(adminUnlocked){ openAdmin(); return; }
-    document.getElementById('modal').innerHTML =
-      '<div class="emoji">🔧</div>' +
-      '<h2>Repair tools</h2>' +
-      '<p>Enter the password.</p>' +
-      '<input id="admin-pass" type="password" autocomplete="off" ' +
-        'style="width:100%;padding:13px 14px;font-size:16px;text-align:center;' +
-        'border-radius:14px;border:2.5px solid var(--cream-dark);background:#fff;' +
-        'color:var(--brown-dark);outline:none;margin-bottom:12px;">' +
-      '<button class="btn" id="btn-admin-go">Unlock</button>' +
-      '<button class="btn secondary" id="btn-admin-cancel">Cancel</button>';
-    document.getElementById('overlay').classList.add('active');
-    var inp = document.getElementById('admin-pass');
-    function tryPass(){
-      if(inp.value === ADMIN_PASS){
-        adminUnlocked = true;
-        closeOverlay();
-        openAdmin();
-      } else {
-        inp.value = '';
-        HAPTIC.wrong();
-        showToast('Wrong password');
-      }
-    }
-    document.getElementById('btn-admin-go').onclick = tryPass;
-    inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') tryPass(); });
-    document.getElementById('btn-admin-cancel').onclick = closeOverlay;
-    setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 250);
+    askPassword('Repair tools', openAdmin);
   }
 
   function openAdmin(){
@@ -4687,11 +5043,25 @@
     var s = summarise(localLevels());
     document.getElementById('admin-levels').value = s.count;
     document.getElementById('admin-stars').value = s.stars;
+    var uid = (cloud && cloud.uid) || (profile && profile.id) || '—';
     document.getElementById('admin-who').innerHTML =
       (profile && profile.name ? 'Account: <b>' + escapeHtml(profile.name) + '</b>' : 'No player name set') +
       '<br>' + (cloud && cloud.isGoogleLinked && cloud.isGoogleLinked()
         ? 'Google connected — changes go to the cloud'
-        : 'Not connected to Google — changes stay on this device');
+        : 'Not connected to Google — changes stay on this device') +
+      '<br><br><b>Your admin id</b> (paste into firestore.rules to edit other players):' +
+      '<br><span id="admin-uid" style="font-size:11px;word-break:break-all;opacity:.8;">' +
+      escapeHtml(uid) + '</span>' +
+      '<br><button id="btn-copy-uid" class="ctrl-btn" style="max-width:120px;margin-top:8px;">Copy id</button>';
+
+    var cp = document.getElementById('btn-copy-uid');
+    if(cp) cp.onclick = function(){
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(uid).then(
+          function(){ showToast('Admin id copied'); },
+          function(){ showToast('Could not copy — long-press the id'); });
+      } else { showToast('Long-press the id to copy it'); }
+    };
     updateStarNote();
   }
 
@@ -4757,7 +5127,10 @@
     showToast('Set to ' + lv + ' levels and ' + summarise(localLevels()).stars + ' stars');
   }
 
-  document.getElementById('btn-back-admin').onclick = function(){ showScreen('screen-settings'); };
+  document.getElementById('btn-back-admin').onclick = function(){
+    titleTaps = 0;                 /* start the tap count over */
+    showScreen('screen-settings');
+  };
   document.getElementById('btn-admin-apply').onclick = applyAdmin;
   document.getElementById('btn-admin-refresh').onclick = readAdminValues;
   document.getElementById('admin-levels').addEventListener('input', updateStarNote);
