@@ -356,6 +356,48 @@
     opacity:.72; margin-top:2px; line-height:1.5; max-width:335px;
   }
 
+  /* ---------- first-run coaching ---------- */
+  .coach{
+    position:absolute; z-index:20; pointer-events:none;
+    left:0; top:0; width:100%; height:100%;
+  }
+  .coach-ring{
+    position:absolute; border-radius:12px;
+    box-shadow:0 0 0 4px var(--gold), 0 0 0 10px rgba(232,163,61,.28);
+    animation:ringPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes ringPulse{
+    0%,100%{box-shadow:0 0 0 4px var(--gold), 0 0 0 10px rgba(232,163,61,.28);}
+    50%    {box-shadow:0 0 0 4px var(--gold), 0 0 0 16px rgba(232,163,61,.10);}
+  }
+  .coach-hand{
+    position:absolute; font-size:30px; pointer-events:none;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));
+  }
+  .coach-hand.tap{animation:handTap 1.3s ease-in-out infinite;}
+  @keyframes handTap{0%,100%{transform:translate(0,0) scale(1);} 45%{transform:translate(0,-10px) scale(.9);}}
+  .coach-hand.drag{animation:handDrag 2s ease-in-out infinite;}
+  @keyframes handDrag{0%{transform:translate(0,0);} 50%{transform:translate(var(--dragx,60px),0);} 100%{transform:translate(0,0);}}
+  .coach-bubble{
+    position:fixed; left:50%; transform:translateX(-50%);
+    background:var(--brown-dark); color:#fff;
+    padding:12px 18px; border-radius:16px; z-index:40;
+    font-size:14px; font-weight:700; line-height:1.45;
+    max-width:min(92vw,360px); text-align:center;
+    box-shadow:0 8px 20px rgba(74,50,34,.35);
+    animation:fadeIn .25s ease;
+  }
+  .coach-bubble b{color:#F6C453;}
+  .coach-bubble .step{
+    display:block; font-size:11px; opacity:.65; font-weight:800;
+    letter-spacing:.5px; margin-bottom:3px;
+  }
+  .coach-skip{
+    background:none; border:none; color:#F6C453; font-size:12px;
+    text-decoration:underline; margin-top:7px; cursor:pointer;
+    font-family:'Nunito',sans-serif; font-weight:700;
+  }
+
   /* ---------- kennel ---------- */
   .star-bank{
     background:linear-gradient(180deg,#F2B457,var(--gold)); color:#fff;
@@ -771,7 +813,7 @@
       <div class="status-chip" id="hearts-display"></div>
       <div class="status-chip" id="dogs-display"></div>
     </div>
-    <div class="board-wrap"><div class="board" id="board"></div></div>
+    <div class="board-wrap"><div class="board" id="board"></div><div class="coach" id="coach"></div></div>
     <div class="controls-row">
       <button class="ctrl-btn" id="btn-hint"><span id="hint-icon"></span>Clue<span class="hint-count" id="hint-count">5</span></button>
       <button class="ctrl-btn" id="btn-reveal"><span id="reveal-icon"></span>Reveal<span class="hint-count" id="reveal-count">3</span></button>
@@ -1024,8 +1066,10 @@
       async putScores(p){
         await setDoc(doc(db, "scores", uid), {
           name:p.name, total:p.total, perfect:p.perfect,
-          levels:p.levels, count:p.count, time:p.time, updated: serverTimestamp()
-        });
+          levels:p.levels, count:p.count, time:p.time,
+          collection: p.collection || null,
+          updated: serverTimestamp()
+        }, { merge: true });
       },
       async topScores(n){
         const q = query(collection(db, "scores"), orderBy("total","desc"), limit(n || 50));
@@ -1054,7 +1098,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260914.140646';
+  var GP_VERSION = '20260914.233827';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -1576,6 +1620,15 @@
     { id:'graduate',   name:'Graduation Cap' }
   ];
 
+  /* Accessories that sit on top of the head. The poodle topknot and the
+     fluffy-breed crown are drawn BEFORE the face, so without this they poke
+     through a hat and it looks like hair growing out of a beanie. When one of
+     these is worn the crown fluff is suppressed. */
+  var ACC_ON_CROWN = {
+    cowboy:1, cap:1, crown:1, party:1, beanie:1, santa:1, tophat:1, viking:1,
+    bunny:1, chef:1, graduate:1, headphones:1, bandana:1, headband:1, clown:1
+  };
+
   var STARS_PER_UNLOCK = 25;
   var MAX_TEAM = 2;
 
@@ -1614,18 +1667,20 @@
 
     s += ears(b, ec, E, HX, HY, rx, ry);
 
+    var hatOnTop = accId && ACC_ON_CROWN[accId];
     if(b.fluffy){
       s += '<circle cx="30" cy="28" r="13" fill="' + c[0] + '"/>';
       s += '<circle cx="70" cy="28" r="13" fill="' + c[0] + '"/>';
-      s += '<circle cx="50" cy="21" r="14" fill="' + c[0] + '"/>';
+      /* the middle puff is the one a hat would sit on, so it goes */
+      if(!hatOnTop) s += '<circle cx="50" cy="21" r="14" fill="' + c[0] + '"/>';
     }
-    if(b.topknot){
+    if(b.topknot && !hatOnTop){
       s += '<circle cx="38" cy="17" r="11" fill="' + ec[0] + '"/>';
       s += '<circle cx="52" cy="13" r="12" fill="' + ec[0] + '"/>';
       s += '<circle cx="64" cy="19" r="10" fill="' + ec[0] + '"/>';
       s += '<circle cx="47" cy="10" r="8"  fill="' + c[0] + '" opacity=".6"/>';
     }
-    if(b.scruffy){
+    if(b.scruffy && !hatOnTop){
       s += '<path d="M33 27 l4 -9 3 8 4 -10 3 9 4 -8 3 9" fill="none" stroke="' + c[1] +
            '" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>';
     }
@@ -1829,12 +1884,14 @@
         '<circle cx="84" cy="30" r="13" fill="#E8553F"/>' +
         '<circle cx="26" cy="16" r="10" fill="#F2705C"/>' +
         '<circle cx="74" cy="16" r="10" fill="#F2705C"/>' +
-        '<circle cx="50" cy="60" r="7" fill="#E8553F"/></g>';
+        '<circle cx="50" cy="60" r="6.4" fill="#E8553F"/>' +
+        '<circle cx="47.6" cy="58" r="2" fill="#fff" opacity=".45"/></g>';
       case 'cap': return '<g><path d="M22 26 q2 -20 28 -20 q26 0 28 20 z" fill="#4A7FC1"/>' +
         '<path d="M20 26 q18 6 38 0 q10 1 16 7 q-28 6 -54 -7z" fill="#3A6AA6"/>' +
         '<circle cx="50" cy="8" r="3" fill="#2E558A"/></g>';
-      case 'moustache': return '<g><path d="M50 68 q-8 -7 -16 -2 q-4 3 0 6 q8 4 16 -4z" fill="#4A3524"/>' +
-        '<path d="M50 68 q8 -7 16 -2 q4 3 0 6 q-8 4 -16 -4z" fill="#4A3524"/></g>';
+      /* sits between the nose and the smile rather than across the mouth */
+      case 'moustache': return '<g><path d="M50 67 q-8 -6 -15 -2 q-4 3 0 5 q8 4 15 -3z" fill="#4A3524"/>' +
+        '<path d="M50 67 q8 -6 15 -2 q4 3 0 5 q-8 4 -15 -3z" fill="#4A3524"/></g>';
       case 'bowtie': return '<g><path d="M50 88 l-14 -7 v14 z" fill="#D9434F"/>' +
         '<path d="M50 88 l14 -7 v14 z" fill="#D9434F"/>' +
         '<circle cx="50" cy="88" r="4" fill="#A82C38"/></g>';
@@ -1858,10 +1915,12 @@
         '<circle cx="81" cy="14" r="5" fill="#F49097"/>' +
         '<circle cx="81" cy="30" r="5" fill="#F49097"/>' +
         '<circle cx="81" cy="22" r="4" fill="#F6C453"/></g>';
-      case 'bandana': return '<g><path d="M20 30 q30 12 60 0 l-4 10 q-26 10 -52 0z" fill="#D9434F"/>' +
-        '<circle cx="34" cy="34" r="2" fill="#fff" opacity=".7"/>' +
-        '<circle cx="50" cy="38" r="2" fill="#fff" opacity=".7"/>' +
-        '<circle cx="66" cy="34" r="2" fill="#fff" opacity=".7"/></g>';
+      /* raised so the brow line stays clear - it was sitting over the eyes */
+      case 'bandana': return '<g><path d="M19 22 q31 11 62 0 l-3 9 q-28 9 -56 0z" fill="#D9434F"/>' +
+        '<path d="M78 24 l9 7 -3 6 -8 -8z" fill="#B8323C"/>' +
+        '<circle cx="33" cy="26" r="1.9" fill="#fff" opacity=".75"/>' +
+        '<circle cx="50" cy="29" r="1.9" fill="#fff" opacity=".75"/>' +
+        '<circle cx="66" cy="26" r="1.9" fill="#fff" opacity=".75"/></g>';
       case 'santa': return '<g><path d="M24 28 q4 -24 30 -22 q20 2 18 14 q-2 10 -14 10 z" fill="#D9434F"/>' +
         '<rect x="20" y="25" width="62" height="9" rx="4.5" fill="#FFFFFF"/>' +
         '<circle cx="76" cy="16" r="7" fill="#FFFFFF"/></g>';
@@ -1891,8 +1950,9 @@
         '<circle cx="66" cy="10" r="10" fill="#FFFFFF"/></g>';
       case 'monocle': return '<g><circle cx="63" cy="45" r="12" fill="#CFE8F5" opacity=".4" stroke="#C9941B" stroke-width="3"/>' +
         '<path d="M63 57 q2 12 -6 18" stroke="#C9941B" stroke-width="2" fill="none"/></g>';
-      case 'headband': return '<g><rect x="18" y="30" width="64" height="9" rx="4.5" fill="#E8553F"/>' +
-        '<rect x="18" y="33" width="64" height="3" fill="#FFFFFF" opacity=".6"/></g>';
+      /* nudged up: at y30 it clipped the top of the eyes at y38.7 */
+      case 'headband': return '<g><rect x="18" y="24" width="64" height="9" rx="4.5" fill="#E8553F"/>' +
+        '<rect x="18" y="27" width="64" height="3" fill="#FFFFFF" opacity=".6"/></g>';
       case 'graduate': return '<g><path d="M50 4 L88 18 L50 32 L12 18 Z" fill="#2E2A28"/>' +
         '<rect x="36" y="20" width="28" height="9" rx="2" fill="#3A3634"/>' +
         '<path d="M84 20 v14" stroke="#F6C453" stroke-width="3"/>' +
@@ -2408,7 +2468,17 @@
     }
     return t;
   }
-  function spentStars(){ return collection.spent || 0; }
+  /* Spend is worked out from what is owned, never stored as a running total.
+     A stored number cannot survive two devices: the tablet unlocks a dog, the
+     phone still thinks it has spent nothing, and whichever syncs last "refunds"
+     the purchase. Derived from the owned lists, the answer is the same on
+     every device by construction. */
+  function spentStars(){
+    var freeCount = 0;
+    BREEDS.forEach(function(b){ if(b.free) freeCount++; });
+    var paidDogs = Math.max(0, collection.dogs.length - freeCount);
+    return (paidDogs + collection.accs.length) * STARS_PER_UNLOCK;
+  }
   function availableStars(){ return Math.max(0, totalStars() - spentStars()); }
 
   function ownsDog(id){ return collection.dogs.indexOf(id) !== -1; }
@@ -2418,8 +2488,8 @@
     if(availableStars() < STARS_PER_UNLOCK) return false;
     if(kind === 'dog'){ if(ownsDog(id)) return false; collection.dogs.push(id); }
     else { if(ownsAcc(id)) return false; collection.accs.push(id); }
-    collection.spent = spentStars() + STARS_PER_UNLOCK;
     save();
+    if(cloud) pushScores();     /* get the purchase off this device at once */
     return true;
   }
 
@@ -2598,6 +2668,8 @@
                     created: Date.now() };
         save(); refreshProfileUI();
       }
+      mergeCollections(doc && doc.collection);
+      paintHero();
       resolveProgressConflict(doc, function(){
         lastSyncAt = Date.now();
         if(onDone) onDone();
@@ -2653,6 +2725,7 @@
     return cloud.topScores(50).then(function(docs){
       var doc = null;
       for(var i=0;i<docs.length;i++){ if(docs[i].id === profile.id){ doc = docs[i]; break; } }
+      var kennelChanged = mergeCollections(doc && doc.collection);
       var theirs = cloudLevelsOf(doc);
       var mine = localLevels();
       var merged = mergeLevels(mine, theirs);
@@ -2661,6 +2734,11 @@
       var gained = after.count - before.count;
       var improved = after.stars - before.stars;
 
+      if(kennelChanged){
+        paintHero();
+        if(document.getElementById('screen-kennel').classList.contains('active')) renderKennel();
+        showToast('Your dogs and accessories synced across');
+      }
       if(gained > 0 || improved > 0){
         adoptLevels(merged);
         refreshPlayButton();
@@ -2678,6 +2756,45 @@
       syncing = false;
       return false;
     });
+  }
+
+  /* Unlocks are permanent, so merging two Kennels is a union - owning a dog on
+     either device means owning it. Because spend is derived from the union,
+     stars can never reappear after a purchase. */
+  function mergeCollections(cloudCol){
+    if(!cloudCol) return false;
+    var changed = false;
+
+    (cloudCol.dogs || []).forEach(function(id){
+      if(BREED_BY_ID[id] && collection.dogs.indexOf(id) === -1){
+        collection.dogs.push(id); changed = true;
+      }
+    });
+    var accIds = {};
+    ACCESSORIES.forEach(function(a){ accIds[a.id] = 1; });
+    (cloudCol.accs || []).forEach(function(id){
+      if(accIds[id] && collection.accs.indexOf(id) === -1){
+        collection.accs.push(id); changed = true;
+      }
+    });
+
+    /* team and outfit: keep this device's choice if it is still valid,
+       otherwise take the one from the cloud */
+    var teamValid = collection.team.length &&
+      collection.team.every(function(id){ return ownsDog(id); });
+    if(!teamValid && Array.isArray(cloudCol.team) && cloudCol.team.length){
+      var t = cloudCol.team.filter(function(id){ return ownsDog(id); }).slice(0, MAX_TEAM);
+      if(t.length){ collection.team = t; changed = true; }
+    }
+    if(cloudCol.worn){
+      for(var d in cloudCol.worn){
+        if(!collection.worn[d] && ownsAcc(cloudCol.worn[d])){
+          collection.worn[d] = cloudCol.worn[d]; changed = true;
+        }
+      }
+    }
+    if(changed) save();
+    return changed;
   }
 
   /* ---- comparing the two saves ---- */
@@ -3104,8 +3221,17 @@
       count++;
       levels[lv] = {s:e.score, t:e.seconds, p:!!e.perfect};
     }
-    cloud.putScores({name:profile.name, total:total, perfect:perfect,
-                     count:count, time:time, levels:levels}).catch(function(){});
+    cloud.putScores({
+      name:profile.name, total:total, perfect:perfect,
+      count:count, time:time, levels:levels,
+      /* the Kennel belongs to the player, not the device */
+      collection: {
+        dogs: collection.dogs.slice(),
+        accs: collection.accs.slice(),
+        team: collection.team.slice(),
+        worn: collection.worn || {}
+      }
+    }).catch(function(){});
   }
   function sortRows(a,b){
     return (b.total - a.total) || (b.perfect - a.perfect) ||
@@ -3135,8 +3261,12 @@
             detail[lv] = {score:d.levels[lv].s, seconds:d.levels[lv].t, perfect:d.levels[lv].p};
           }
           return {id:d.id, name:d.name||'Pup', total:d.total||0, levels:d.count||0,
-                  time:d.time||0, perfect:d.perfect||0, detail:detail};
+                  time:d.time||0, perfect:d.perfect||0, detail:detail,
+                  hidden: !!d.hidden || isHiddenLocally(d.id)};
         });
+        /* hidden players are dropped for everyone except an admin, who needs
+           to see them in order to put them back */
+        if(!lbAdmin) rows = rows.filter(function(r){ return !r.hidden; });
         rows = dedupeByName(rows);
         rows.sort(sortRows);
         return rows;
@@ -3155,7 +3285,7 @@
   function dedupeByName(rows){
     var byName = {};
     rows.forEach(function(r){
-      var key = normalizeName(r.name);
+      var key = normalizeName(r.name) + (r.hidden ? '::hidden' : '');
       var cur = byName[key];
       if(!cur){ byName[key] = r; return; }
 
@@ -3181,7 +3311,8 @@
       var keepId = (profile && (cur.id === profile.id || r.id === profile.id))
         ? profile.id : cur.id;
       byName[key] = { id:keepId, name:cur.name, total:total, levels:count,
-                      time:time, perfect:perfect, detail:detail };
+                      time:time, perfect:perfect, detail:detail,
+                      hidden: cur.hidden || r.hidden };
     });
 
     var out = [];
@@ -3337,6 +3468,7 @@
   document.getElementById('btn-back-settings').onclick = function(){ showScreen('screen-title'); };
   document.getElementById('btn-back-howto').onclick    = function(){ showScreen('screen-title'); };
   document.getElementById('btn-menu').onclick = function(){
+    clearCoach();
     snapshotRun(); refreshPlayButton(); showScreen('screen-title');
   };
   document.getElementById('btn-restart').onclick = function(){
@@ -3968,14 +4100,16 @@
         escapeHtml(row.id) + '</span></div>' +
       '<button class="btn" id="ep-levels">Levels &amp; stars</button>' +
       '<button class="btn secondary" id="ep-name">Change name</button>' +
-      '<button class="btn secondary" id="ep-delete" ' +
-        'style="background:linear-gradient(180deg,#E8654A,#D64320);color:#fff;' +
-        'box-shadow:0 5px 0 #A33418;">Delete player</button>' +
+      (row.hidden
+        ? '<button class="btn secondary" id="ep-delete">Restore player</button>'
+        : '<button class="btn secondary" id="ep-delete" ' +
+          'style="background:linear-gradient(180deg,#E8654A,#D64320);color:#fff;' +
+          'box-shadow:0 5px 0 #A33418;">Hide player</button>') +
       '<button class="btn secondary" id="ep-cancel">Close</button>';
     document.getElementById('overlay').classList.add('active');
     document.getElementById('ep-levels').onclick = function(){ editPlayerLevels(row); };
     document.getElementById('ep-name').onclick   = function(){ editPlayerName(row); };
-    document.getElementById('ep-delete').onclick = function(){ deletePlayer(row, 1); };
+    document.getElementById('ep-delete').onclick = function(){ setPlayerHidden(row, !row.hidden); };
     document.getElementById('ep-cancel').onclick = closeOverlay;
   }
 
@@ -4096,26 +4230,36 @@
     });
   }
 
-  /* ---- delete: three confirmations ---- */
-  function deletePlayer(row, step){
-    var prompts = [
-      'Delete "' + row.name + '"?\n\nEvery level, star and score for this player will be removed.',
-      'Are you sure?\n\nThis cannot be undone. "' + row.name + '" will vanish from the leaderboard.',
-      'Last chance.\n\nType-free final check: really delete "' + row.name + '" permanently?'
-    ];
-    for(var i=0;i<3;i++){
-      if(!confirm(prompts[i])) { showToast('Cancelled'); return; }
+  /* ---- hide / restore: two confirmations, nothing destroyed ----
+     A hidden player keeps every level, star and score. The board just skips
+     them, so the record can always be brought back. */
+  function setPlayerHidden(row, hide){
+    if(hide){
+      if(!confirm('Hide "' + row.name + '" from the leaderboard?\n\nNothing is deleted — their levels and scores are kept and can be restored.')) return;
+      if(!confirm('Are you sure?\n\n"' + row.name + '" will disappear from everyone\'s leaderboard.')) return;
+    } else {
+      if(!confirm('Put "' + row.name + '" back on the leaderboard?')) return;
     }
-    if(!cloud || !cloud.adminDelete){
-      closeOverlay(); showToast('Not connected — cloud unchanged'); return;
-    }
-    cloud.adminDelete(row.id, normalizeName(row.name)).then(function(){
-      var lb = readLeaderboard();
-      if(lb[row.id]){ delete lb[row.id]; writeLeaderboard(lb); }
+
+    function localOnly(why){
+      setHiddenLocally(row.id, hide);
       closeOverlay(); renderLeaderboard();
-      showToast(row.name + ' deleted');
+      showToast((hide ? 'Hidden' : 'Restored') + ' on this device only — ' + why);
+    }
+
+    if(!cloud || !cloud.adminSetHidden){ localOnly('not connected'); return; }
+
+    cloud.adminSetHidden(row.id, hide).then(function(){
+      setHiddenLocally(row.id, false);   /* the cloud flag is now the truth */
+      closeOverlay(); renderLeaderboard();
+      showToast(row.name + (hide ? ' hidden' : ' restored'));
     }, function(err){
-      closeOverlay(); showToast(adminError(err));
+      var code = (err && err.code) || '';
+      if(code.indexOf('permission') !== -1){
+        localOnly('add "hidden" to the allowed fields in firestore.rules');
+      } else {
+        localOnly(code || 'write failed');
+      }
     });
   }
 
@@ -4144,12 +4288,17 @@
       if(lbMode === 'total'){
         rows.forEach(function(row, i){
           var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+          var hiddenStyle = row.hidden
+            ? 'cursor:pointer;opacity:.5;background:#EFE6D8;box-shadow:0 3px 0 #D8C9AE;'
+            : 'cursor:pointer;';
           html += '<div class="lb-row' + (row.id===myId?' me':'') + '"' +
-            (lbAdmin ? ' data-lbid="' + escapeHtml(row.id) + '" style="cursor:pointer;"' : '') + '>' +
+            (lbAdmin ? ' data-lbid="' + escapeHtml(row.id) + '" style="' + hiddenStyle + '"' : '') + '>' +
             '<div class="lb-rank">' + medal + '</div>' +
             '<div style="flex:1; min-width:0;">' +
               '<div class="lb-name">' + escapeHtml(row.name) + '</div>' +
-              '<div class="lb-meta">' + row.levels + ' level' + (row.levels===1?'':'s') +
+              '<div class="lb-meta">' +
+                (row.hidden ? '<b>HIDDEN</b> · ' : '') +
+                row.levels + ' level' + (row.levels===1?'':'s') +
                 (row.perfect ? ' · ' + row.perfect + ' flawless ⭐' : '') + '</div>' +
             '</div>' +
             '<div class="lb-score">' + row.total + '</div></div>';
@@ -4217,6 +4366,8 @@
     document.getElementById('level-pill').textContent = 'Level ' + lv;
     updateHearts(); renderBoard(); updateDogCounter(); updateHintUI();
     startTimer(resumed ? resumed.elapsed : 0);
+    if(lv <= 2 && !coachDone()) setTimeout(function(){ startCoach(lv); }, 500);
+    else clearCoach();
     if(resumed && (resumed.hearts < MAX_HEARTS || countPlaced() > 0)){
       showToast('Picking up where you left off');
     }
@@ -4412,6 +4563,134 @@
     }
   }
 
+  /* ================= FIRST-RUN COACHING =================
+     Levels 1 and 2 teach the three gestures by pointing at a real square and
+     waiting for the player to do it - nobody reads a rules screen, and a wall
+     of text before the first puzzle is where people quit. Each step clears
+     itself the moment the action happens, and the whole thing can be skipped.
+     Shown once ever, then never again. */
+  var COACH_KEY = 'goodpups_coached_v1';
+  var coachStep = null;
+
+  function coachDone(){
+    try{ return localStorage.getItem(COACH_KEY) === '1'; }catch(e){ return false; }
+  }
+  function markCoachDone(){
+    try{ localStorage.setItem(COACH_KEY, '1'); }catch(e){}
+  }
+
+  function clearCoach(){
+    coachStep = null;
+    var c = document.getElementById('coach');
+    if(c) c.innerHTML = '';
+    var b = document.getElementById('coach-bubble');
+    if(b && b.parentNode) b.parentNode.removeChild(b);
+  }
+
+  function startCoach(lv){
+    clearCoach();
+    if(coachDone()) return;
+    if(lv === 1) showCoach('mark');
+    else if(lv === 2) showCoach('sweep');
+  }
+
+  /* points at a square that is safe to demonstrate on - never the answer,
+     so following the instruction cannot cost a life */
+  function coachTarget(){
+    var n = puzzle.n;
+    for(var r=0;r<n;r++){
+      for(var c=0;c<n;c++){
+        if(board[r][c] === 0 && puzzle.solution[r] !== c) return {r:r, c:c};
+      }
+    }
+    return {r:0, c:0};
+  }
+  function coachDogTarget(){
+    for(var r=0;r<puzzle.n;r++){
+      if(board[r][puzzle.solution[r]] !== 1) return {r:r, c:puzzle.solution[r]};
+    }
+    return null;
+  }
+
+  function showCoach(step){
+    coachStep = step;
+    var layer = document.getElementById('coach');
+    if(!layer || !puzzle) return;
+    layer.innerHTML = '';
+
+    var old = document.getElementById('coach-bubble');
+    if(old && old.parentNode) old.parentNode.removeChild(old);
+
+    var t, text, stepNo, hand = 'tap', dragPx = 0;
+    if(step === 'mark'){
+      t = coachTarget();
+      stepNo = 'STEP 1 OF 3';
+      text = '<b>Tap</b> this square to mark it ✕<br><span style="opacity:.8;font-weight:400;">that means "no poodle here"</span>';
+    } else if(step === 'place'){
+      t = coachDogTarget();
+      if(!t){ finishCoach(); return; }
+      stepNo = 'STEP 2 OF 3';
+      text = '<b>Double tap</b> here to place a poodle<br><span style="opacity:.8;font-weight:400;">one per row, column and colour</span>';
+    } else if(step === 'sweep'){
+      t = coachTarget();
+      stepNo = 'STEP 3 OF 3';
+      hand = 'drag';
+      dragPx = Math.min(cellPx * 2, 120);
+      text = '<b>Drag</b> across squares to mark several at once<br><span style="opacity:.8;font-weight:400;">start on a ✕ to rub them out again</span>';
+    } else { return; }
+
+    var x = t.c * cellPx + FRAME, y = t.r * cellPx + FRAME;
+    var ring = document.createElement('div');
+    ring.className = 'coach-ring';
+    ring.style.left = x + 'px'; ring.style.top = y + 'px';
+    ring.style.width = cellPx + 'px'; ring.style.height = cellPx + 'px';
+    layer.appendChild(ring);
+
+    var h2 = document.createElement('div');
+    h2.className = 'coach-hand ' + hand;
+    h2.textContent = '👆';
+    h2.style.left = (x + cellPx*0.52) + 'px';
+    h2.style.top  = (y + cellPx*0.55) + 'px';
+    if(dragPx) h2.style.setProperty('--dragx', dragPx + 'px');
+    layer.appendChild(h2);
+
+    var bubble = document.createElement('div');
+    bubble.className = 'coach-bubble';
+    bubble.id = 'coach-bubble';
+    bubble.innerHTML = '<span class="step">' + stepNo + '</span>' + text +
+      '<br><button class="coach-skip" id="coach-skip">skip the tutorial</button>';
+    document.body.appendChild(bubble);
+
+    /* sit the bubble under the board, or above it if there is no room */
+    var wrap = document.querySelector('.board-wrap').getBoundingClientRect();
+    var below = wrap.bottom + 12;
+    if(below + 110 > window.innerHeight) bubble.style.top = Math.max(8, wrap.top - 110) + 'px';
+    else bubble.style.top = below + 'px';
+
+    document.getElementById('coach-skip').onclick = function(){
+      markCoachDone(); clearCoach(); showToast('Tutorial off — rules are in the Rules button');
+    };
+  }
+
+  function finishCoach(){
+    markCoachDone();
+    clearCoach();
+  }
+
+  /* called from the input handlers as the player performs each gesture */
+  function coachSaw(action){
+    if(!coachStep) return;
+    if(action === 'mark' && coachStep === 'mark'){
+      setTimeout(function(){ showCoach('place'); }, 420);
+    } else if(action === 'place' && coachStep === 'place'){
+      clearCoach();
+      showToast('That is the idea — finish the level!');
+    } else if(action === 'sweep' && coachStep === 'sweep'){
+      finishCoach();
+      showToast('You have got it. Have fun!');
+    }
+  }
+
   /* ================= INPUT ================= */
   var dragging=false, dragPainted=false, dragStartCell=null, sweepCount=0, dragMode='paint';
   var lastTapKey=null, lastTapTime=0;
@@ -4567,6 +4846,7 @@
     hapticsArmed = true;
     HAPTIC.sweep();
     runDirty = true;
+    if(sweepCount >= 2) coachSaw('sweep');
   }
 
   function onPointerUp(){
@@ -4591,11 +4871,18 @@
     }
     lastTapKey = key; lastTapTime = now;
     if(board[r][c] === 1){
-      board[r][c] = 0; renderCellContent(el,r,c); updateDogCounter(); SFX.unmark(); HAPTIC.unmark();
+      /* A poodle can only ever land on a correct square - a wrong double tap
+         costs a life and never places one. So a placed poodle is always right,
+         and clearing it by tapping was just a way to lose work by accident. */
+      SFX.mark(); HAPTIC.mark();
+      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+      showToast('That one is right where it belongs');
+      return;
     } else if(board[r][c] === 2){
       board[r][c] = 0; renderCellContent(el,r,c); SFX.unmark(); HAPTIC.unmark();
     } else {
       board[r][c] = 2; renderCellContent(el,r,c); SFX.mark(); HAPTIC.mark();
+      coachSaw('mark');
     }
     snapshotRun();
   }
@@ -4625,6 +4912,7 @@
     SFX.correct(); HAPTIC.correct();
     burst(el, ['🐾','✨','💛'], 7);
     if(settings.autoCross) autoCross(r,c);
+    coachSaw('place');
     updateDogCounter(); snapshotRun(); checkWin();
   }
 
