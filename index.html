@@ -205,6 +205,10 @@
   .topbar{width:100%; display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
   .screen-title{font-size:23px; font-weight:800;}
   .scroller{width:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  /* the kennel scrolls as one column so the sticky header has something to
+     stick to - a separately scrolling child would leave it pinned to nothing */
+  #screen-kennel{overflow:hidden;}
+  #screen-kennel .scroller{flex:1; min-height:0;}
   .band-label{
     width:100%; font-family:'Baloo 2',sans-serif; font-weight:700;
     font-size:13.5px; color:var(--brown); opacity:.78;
@@ -307,6 +311,11 @@
     animation:xIn .22s cubic-bezier(.34,1.56,.64,1);
   }
   .cell .mark-x svg{width:56%; height:56%; display:block;}
+  /* a picture marker fills the dished tile rather than being a stroke */
+  .cell .mark-x.mark-art{
+    background:radial-gradient(circle at 50% 42%, rgba(0,0,0,.34) 0%, rgba(0,0,0,.20) 62%, rgba(0,0,0,.10) 100%);
+  }
+  .cell .mark-x.mark-art svg{width:78%; height:78%; filter:drop-shadow(0 1.5px 2px rgba(0,0,0,.45));}
   .cell .x-stroke{
     stroke:#FFFFFF; stroke-width:19; stroke-linecap:round; fill:none;
     filter:drop-shadow(0 1.5px 2px rgba(0,0,0,.6));
@@ -405,14 +414,82 @@
     padding:8px 14px; border-radius:999px; white-space:nowrap;
     box-shadow:0 3px 0 var(--gold-dark), inset 0 1.5px 0 rgba(255,255,255,.4);
   }
+  /* The preview and tabs stay put while the grid scrolls, so you can always
+     see what your two dogs actually look like while choosing. */
+  .kennel-head{
+    position:sticky; top:0; z-index:12; width:100%;
+    background:linear-gradient(180deg, var(--cream) 78%, rgba(255,246,233,0));
+    padding-bottom:6px;
+  }
   .kennel-hint{
-    font-size:12.5px; color:var(--brown); text-align:center;
-    margin-bottom:10px; line-height:1.5; min-height:34px;
+    font-size:12px; color:var(--brown); text-align:center;
+    margin-bottom:2px; line-height:1.45;
   }
-  .pick-grid{
-    display:grid; grid-template-columns:repeat(5,1fr); gap:8px; width:100%;
-    padding-bottom:12px;
+  .pick-grid{ width:100%; padding-bottom:12px; }
+  .pick-grid-inner{
+    display:grid; grid-template-columns:repeat(5,1fr);
+    gap:8px 8px; row-gap:26px;      /* room for the price pill beneath a tile */
+    width:100%;
   }
+  .pick-grid .band-label{margin:14px 0 8px;}
+  .pick-grid .band-label:first-child{margin-top:2px;}
+  /* themes and markers want a bigger swatch than a 5-wide grid allows */
+  .shop-grid-3{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:10px; row-gap:30px; width:100%;
+  }
+  .swatch{
+    position:relative; aspect-ratio:1/1; border:none; cursor:pointer;
+    border-radius:15px; padding:0;
+    box-shadow:0 3.5px 0 var(--cream-dark);
+    -webkit-appearance:none; appearance:none;
+    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+  }
+  .swatch i{display:block;}
+  /* the colour blocks are clipped, the tile itself is not, so the price pill
+     underneath stays visible */
+  .swatch i:first-child{border-top-left-radius:13px;}
+  .swatch i:nth-child(3){border-top-right-radius:13px;}
+  .swatch i:nth-child(7){border-bottom-left-radius:13px;}
+  .swatch i:nth-child(9){border-bottom-right-radius:13px;}
+  .swatch.chosen{box-shadow:0 3.5px 0 var(--gold-dark), inset 0 0 0 3px var(--gold-dark);}
+  .swatch.chosen::before{
+    content:'✓'; position:absolute; top:-4px; right:-4px; z-index:2;
+    width:20px; height:20px; border-radius:50%;
+    background:var(--gold-dark); color:#fff; font-size:12px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 4px rgba(0,0,0,.25);
+  }
+  .swatch.locked{opacity:.96;}
+  .swatch-name{
+    position:absolute; left:0; right:0; bottom:0; z-index:1;
+    font-family:'Nunito',sans-serif; font-size:9.5px; font-weight:800;
+    background:rgba(255,255,255,.82); color:var(--brown-dark);
+    padding:2px 3px; text-align:center;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .marker-tile{
+    position:relative; aspect-ratio:1/1; border:none; cursor:pointer;
+    overflow:visible;
+    border-radius:15px; padding:6px;
+    background:linear-gradient(180deg,#FFFFFF,#F8F0E1);
+    box-shadow:0 3.5px 0 var(--cream-dark);
+    display:flex; align-items:center; justify-content:center;
+    -webkit-appearance:none; appearance:none;
+  }
+  .marker-tile.chosen{box-shadow:0 3.5px 0 var(--gold-dark), inset 0 0 0 3px var(--gold-dark);}
+  .marker-tile.chosen::before{
+    content:'✓'; position:absolute; top:-4px; right:-4px; z-index:2;
+    width:20px; height:20px; border-radius:50%;
+    background:var(--gold-dark); color:#fff; font-size:12px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 4px rgba(0,0,0,.25);
+  }
+  .marker-tile .tile-inner{
+    width:80%; height:80%; border-radius:22%;
+    background:radial-gradient(circle at 50% 42%, rgba(0,0,0,.34) 0%, rgba(0,0,0,.2) 62%, rgba(0,0,0,.1) 100%);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .marker-tile svg{width:76%; height:76%; filter:drop-shadow(0 1.5px 2px rgba(0,0,0,.45));}
   .pick{
     position:relative; aspect-ratio:1/1; border:none; cursor:pointer;
     border-radius:15px; padding:4px;
@@ -432,13 +509,22 @@
     box-shadow:0 3.5px 0 #DCCDB2, inset 0 1.5px 0 rgba(255,255,255,.7);
   }
   .pick.locked svg{opacity:.94;}
-  .pick.locked::after{
+  /* The price pill sits BELOW the tile, not across it - collars and bow ties
+     live at the bottom of the artwork and the old badge covered exactly the
+     thing you were trying to judge. Same pill on dogs, accessories, yards and
+     markers, so "still locked" looks identical everywhere. */
+  .pick.locked::after, .swatch.locked::after, .marker-tile.locked::after{
     content:'★' attr(data-cost);
-    position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
+    position:absolute; bottom:-16px; left:50%; transform:translateX(-50%);
     font-family:'Baloo 2',sans-serif; font-weight:800; font-size:10px;
-    background:rgba(74,50,34,.8); color:#fff;
-    padding:1px 7px; border-radius:999px; white-space:nowrap;
-    box-shadow:0 1px 3px rgba(0,0,0,.25);
+    background:rgba(74,50,34,.82); color:#fff;
+    padding:1.5px 9px; border-radius:999px; white-space:nowrap;
+    letter-spacing:.2px; box-shadow:0 1.5px 3px rgba(0,0,0,.22);
+  }
+  /* gold when you can actually afford it, so the eye goes to what is buyable */
+  .pick.affordable::after, .swatch.affordable::after, .marker-tile.affordable::after{
+    background:linear-gradient(180deg,#F2B457,var(--gold-dark));
+    color:#fff;
   }
   /* affordable ones get a gold rim and their price turns gold - the eye goes
      straight to what you can actually buy right now */
@@ -447,9 +533,7 @@
     box-shadow:0 3.5px 0 var(--gold), inset 0 0 0 2px var(--gold);
   }
   .pick.affordable svg{opacity:1;}
-  .pick.affordable::after{
-    background:linear-gradient(180deg,#F2B457,var(--gold-dark));
-  }
+
   .pick.chosen{
     background:linear-gradient(180deg,#FFE7BE,#FFD489);
     box-shadow:0 3.5px 0 var(--gold-dark), inset 0 0 0 2.5px var(--gold-dark);
@@ -471,7 +555,7 @@
      appear - accessory and all. Picking from a grid of 25 without this meant
      guessing what your team looked like. */
   .team-bar{
-    width:100%; display:flex; gap:10px; margin-top:10px;
+    width:100%; display:flex; gap:10px; margin:0 0 8px;
     padding:10px 12px; border-radius:18px;
     background:linear-gradient(180deg,#FFFFFF,#F8F0E1);
     box-shadow:0 4px 0 var(--cream-dark), inset 0 1.5px 0 rgba(255,255,255,.9);
@@ -593,6 +677,7 @@
     <button class="btn" id="btn-play"><span id="play-icon"></span><span>Play<span class="sub" id="play-sub">Level 1</span></span></button>
     <button class="btn secondary" id="btn-levels"><span id="levels-icon"></span>Level Select</button>
     <button class="btn secondary" id="btn-kennel"><span id="kennel-icon"></span>The Kennel</button>
+    <button class="btn secondary" id="btn-shop"><span id="shop-icon"></span>Pet Shop</button>
     <button class="btn secondary" id="btn-leaderboard"><span id="lb-icon"></span>Leaderboard</button>
     <button class="btn secondary" id="btn-settings"><span id="settings-icon"></span>Settings</button>
     <button class="btn secondary" id="btn-howto"><span id="howto-icon"></span>How to play</button>
@@ -613,13 +698,29 @@
       <div class="screen-title">The Kennel</div>
       <div class="star-bank" id="star-bank">★ 0</div>
     </div>
-    <div class="lb-tabs">
-      <button class="lb-tab active" id="tab-dogs">Dogs</button>
-      <button class="lb-tab" id="tab-accs">Accessories</button>
+    <div class="kennel-head">
+      <div class="team-bar" id="team-bar"></div>
+      <div class="kennel-hint" id="kennel-hint"></div>
     </div>
-    <div class="kennel-hint" id="kennel-hint"></div>
     <div class="scroller"><div class="pick-grid" id="pick-grid"></div></div>
-    <div class="team-bar" id="team-bar"></div>
+  </section>
+
+  <section class="screen" id="screen-shop">
+    <div class="topbar">
+      <button class="icon-btn" id="btn-back-shop">←</button>
+      <div class="screen-title">Pet Shop</div>
+      <div class="star-bank" id="shop-bank">★ 0</div>
+    </div>
+    <div class="kennel-head">
+      <div class="team-bar" id="shop-team"></div>
+      <div class="lb-tabs" style="margin-bottom:6px;">
+        <button class="lb-tab active" id="tab-shop-acc">Accessories</button>
+        <button class="lb-tab" id="tab-shop-yard">Yards</button>
+        <button class="lb-tab" id="tab-shop-mark">Markers</button>
+      </div>
+      <div class="kennel-hint" id="shop-hint"></div>
+    </div>
+    <div class="scroller"><div class="pick-grid" id="shop-grid"></div></div>
   </section>
 
   <section class="screen" id="screen-leaderboard">
@@ -1098,7 +1199,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260914.233827';
+  var GP_VERSION = '20260915.010547';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -1592,33 +1693,190 @@
       ear:{shape:'drop', w:12, h:17, y:52, tilt:13} }
   ];
 
-  var ACCESSORIES = [
-    { id:'sunglasses', name:'Sunglasses' },
-    { id:'cowboy',     name:'Cowboy Hat' },
-    { id:'clown',      name:'Clown Hair' },
-    { id:'cap',        name:'Baseball Cap' },
-    { id:'moustache',  name:'Moustache' },
-    { id:'bowtie',     name:'Bow Tie' },
-    { id:'crown',      name:'Crown' },
-    { id:'party',      name:'Party Hat' },
-    { id:'nerd',       name:'Nerd Glasses' },
-    { id:'eyepatch',   name:'Eye Patch' },
-    { id:'beanie',     name:'Beanie' },
-    { id:'flower',     name:'Flower' },
-    { id:'bandana',    name:'Bandana' },
-    { id:'santa',      name:'Santa Hat' },
-    { id:'halo',       name:'Halo' },
-    { id:'headphones', name:'Headphones' },
-    { id:'tophat',     name:'Top Hat' },
-    { id:'viking',     name:'Viking Helmet' },
-    { id:'snorkel',    name:'Snorkel' },
-    { id:'bunny',      name:'Bunny Ears' },
-    { id:'scarf',      name:'Scarf' },
-    { id:'chef',       name:'Chef Hat' },
-    { id:'monocle',    name:'Monocle' },
-    { id:'headband',   name:'Sweatband' },
-    { id:'graduate',   name:'Graduation Cap' }
+/* Accessories, grouped for the Kennel.
+     The original 25 ids are untouched - people have spent stars on them, so
+     their id, look and price must never change. New items are built from
+     parameterised shapes, which is why a cap in four colours costs four lines
+     rather than four drawings.
+
+     cat : 'head' | 'eyes' | 'collar' | 'ears'
+     base: shape to draw for the new parameterised items
+     col : main colour, col2 an accent where the shape uses one
+  */
+/* ================= YARD THEMES =================
+     A theme repaints the board: nine yard colours, the lines between them, and
+     the surface underneath. The nine have to stay distinguishable from each
+     other at a glance - that is the whole puzzle - so every palette is built
+     from distinct hues rather than shades of one colour. */
+  var THEMES = [
+    { id:'classic', name:'Classic Lawn', free:true,
+      cols:['#F6C453','#7FB77E','#7EC8E3','#F49097','#B497D6','#F2A65A','#6FC1AE','#E38B6E','#9BB7E0'],
+      line:'#FFFFFF', thin:'rgba(255,255,255,0.55)', board:'#FFFFFF', page:null },
+
+    { id:'spring', name:'Spring Meadow',
+      cols:['#9ED06F','#6FB88A','#BFD98A','#7FC4A8','#D3E58C','#8FC96B','#A8DCA0','#63AE7E','#C8E0A5'],
+      line:'#F4F7EC', thin:'rgba(255,255,255,0.5)', board:'#EDF3E2', page:'#F2F7E8' },
+
+    { id:'autumn', name:'Autumn Park',
+      cols:['#E0A050','#C2703A','#D9A441','#B5562F','#E8C06A','#A8663C','#D4864A','#8E4A2A','#EBD08C'],
+      line:'#F6EBDA', thin:'rgba(255,255,255,0.45)', board:'#EFE0C9', page:'#F7ECD9' },
+
+    { id:'midnight', name:'Midnight Stroll',
+      cols:['#2E4A6B','#3C6B5A','#4A3C6B','#6B3C52','#2F5F6B','#5A4A2E','#3E3E5C','#6B4A3C','#3A5C42'],
+      line:'#7FE8C8', thin:'rgba(127,232,200,0.35)', board:'#141B26', page:'#0F141C',
+      dark:true, glow:true },
+
+    { id:'zen', name:'Zen Garden',
+      cols:['#E2D6BE','#C8B99C','#D6C7A8','#BBAA8B','#EAE0CB','#B0A186','#D0C0A0','#C2B195','#DED2B7'],
+      line:'#8C7A5B', thin:'rgba(140,122,91,0.35)', board:'#B79E77', page:'#EFE7D6' },
+
+    { id:'snow', name:'Snowy Backyard',
+      cols:['#DCE8F2','#C4D8EA','#E8F0F7','#B6CCE0','#D0E2F0','#A8C2D8','#E0EAF4','#BFD4E6','#CEDEEE'],
+      line:'#FFFFFF', thin:'rgba(255,255,255,0.75)', board:'#F2F8FD', page:'#EAF2FA' },
+
+    { id:'beach', name:'Sunny Beachyard',
+      cols:['#F2D9A8','#E8C486','#F6E3BE','#DCB673','#EFD09A','#D4A660','#F2DCB0','#E0C493','#FAEBD0'],
+      line:'#FFFDF6', thin:'rgba(255,255,255,0.6)', board:'#FFF8E8', page:'#FDF2DC' },
+
+    { id:'rug', name:'Living Room Rug',
+      cols:['#C98A6A','#A86B52','#D9A182','#8E5742','#E0B294','#96604A','#CE9878','#B07A5E','#E8C4A8'],
+      line:'#F2E3D2', thin:'rgba(255,255,255,0.4)', board:'#8A5A3C', page:'#F0E0CC' },
+
+    { id:'forest', name:'Enchanted Forest',
+      cols:['#3E6B4A','#55805C','#2F5A42','#6B9A6A','#47735A','#7CAE7A','#38624E','#5E8F62','#84BC86'],
+      line:'#CDEBC6', thin:'rgba(205,235,198,0.35)', board:'#21382B', page:'#1C3025',
+      dark:true, glow:true },
+
+    { id:'picnic', name:'Picnic Park',
+      cols:['#E8615F','#F2E8DC','#D94F4D','#FFFFFF','#E07472','#F5EEE4','#C94341','#FBF5EC','#EF8583'],
+      line:'#FFFFFF', thin:'rgba(255,255,255,0.6)', board:'#FFFFFF', page:'#F6EFE3' },
+
+    { id:'topiary', name:'English Topiary',
+      cols:['#6E9A6C','#8FB58A','#5C8A5F','#A5C79E','#7BA878','#B9A8D6','#649462','#97BE92','#CBBCE4'],
+      line:'#F0F4EA', thin:'rgba(255,255,255,0.5)', board:'#E4EADB', page:'#EFF3E7' },
+
+    { id:'desert', name:'Desert Oasis',
+      cols:['#D99A6C','#C4794F','#E8B98A','#B0653C','#DFA878','#9E5733','#EFCB9F','#CA8A5C','#F2DBBB'],
+      line:'#FBEEDC', thin:'rgba(255,255,255,0.45)', board:'#E5C6A0', page:'#F8E9D4' },
+
+    { id:'blueprint', name:'Blueprint',
+      cols:['#2C5A8C','#3A6FA5','#24486F','#4783BC','#31629A','#1D3A5C','#3F79AF','#295380','#528FC7'],
+      line:'#CFE4F7', thin:'rgba(207,228,247,0.4)', board:'#16304D', page:'#122741',
+      dark:true }
   ];
+
+  /* ================= MARKERS =================
+     What a ruled-out square shows instead of a plain ✕. Each is drawn inside
+     the same pressed-in tile, so whatever you pick still reads as "this square
+     is out" at a glance - which matters more than the decoration. */
+  var MARKERS = [
+    { id:'x',        name:'Classic ✕',      free:true },
+    { id:'paw',      name:'Muddy Paw',      col:'#7A5232' },
+    { id:'twigs',    name:'Crossed Twigs',  col:'#8B6239' },
+    { id:'tennis',   name:'Tennis Ball',    col:'#D7E64A' },
+    { id:'bone',     name:'Squeaky Bone',   col:'#F2B8C6' },
+    { id:'chalk',    name:'Sidewalk Chalk', col:'#A8E6D0' },
+    { id:'daisy',    name:'Fallen Daisy',   col:'#FFFFFF' },
+    { id:'hydrant',  name:'Fire Hydrant',   col:'#D9434F' },
+    { id:'biscuit',  name:'Dog Biscuit',    col:'#E0B579' },
+    { id:'stitch',   name:'Cross-Stitch',   col:'#E88AA0' },
+    { id:'nopups',   name:'No Pups Sign',   col:'#D9434F' },
+    { id:'frisbee',  name:'Frisbee',        col:'#5FC2E8' },
+    { id:'pebble',   name:'Carved Pebble',  col:'#B8B2A6' }
+  ];
+
+  var ACC_CATS = [
+    { id:'head',   name:'Hats' },
+    { id:'eyes',   name:'Eyewear' },
+    { id:'collar', name:'Collars' },
+    { id:'ears',   name:'Earrings' }
+  ];
+
+  var ACCESSORIES = [
+    /* ---------- the original 25, unchanged ---------- */
+    { id:'sunglasses', name:'Sunglasses',      cat:'eyes'   },
+    { id:'cowboy',     name:'Cowboy Hat',      cat:'head'   },
+    { id:'clown',      name:'Clown Hair',      cat:'head'   },
+    { id:'cap',        name:'Baseball Cap',    cat:'head'   },
+    { id:'moustache',  name:'Moustache',       cat:'head'   },
+    { id:'bowtie',     name:'Bow Tie',         cat:'collar' },
+    { id:'crown',      name:'Crown',           cat:'head'   },
+    { id:'party',      name:'Party Hat',       cat:'head'   },
+    { id:'nerd',       name:'Nerd Glasses',    cat:'eyes'   },
+    { id:'eyepatch',   name:'Eye Patch',       cat:'eyes'   },
+    { id:'beanie',     name:'Beanie',          cat:'head'   },
+    { id:'flower',     name:'Flower',          cat:'head'   },
+    { id:'bandana',    name:'Bandana',         cat:'head'   },
+    { id:'santa',      name:'Santa Hat',       cat:'head'   },
+    { id:'halo',       name:'Halo',            cat:'head'   },
+    { id:'headphones', name:'Headphones',      cat:'head'   },
+    { id:'tophat',     name:'Top Hat',         cat:'head'   },
+    { id:'viking',     name:'Viking Helmet',   cat:'head'   },
+    { id:'snorkel',    name:'Snorkel',         cat:'eyes'   },
+    { id:'bunny',      name:'Bunny Ears',      cat:'head'   },
+    { id:'scarf',      name:'Scarf',           cat:'collar' },
+    { id:'chef',       name:'Chef Hat',        cat:'head'   },
+    { id:'monocle',    name:'Monocle',         cat:'eyes'   },
+    { id:'headband',   name:'Sweatband',       cat:'head'   },
+    { id:'graduate',   name:'Graduation Cap',  cat:'head'   },
+
+    /* ---------- new: hats ---------- */
+    { id:'cap-blue',    name:'Cap · Blue',     cat:'head', base:'cap',    col:'#4A7FC1', col2:'#3A6AA6' },
+    { id:'cap-purple',  name:'Cap · Purple',   cat:'head', base:'cap',    col:'#9A7CC0', col2:'#7E62A4' },
+    { id:'cap-green',   name:'Cap · Green',    cat:'head', base:'cap',    col:'#6FAF7E', col2:'#57925F' },
+    { id:'cap-red',     name:'Cap · Red',      cat:'head', base:'cap',    col:'#D9434F', col2:'#B32F3C' },
+    { id:'beanie-pink', name:'Beanie · Pink',  cat:'head', base:'beanie', col:'#F49097', col2:'#D9727C' },
+    { id:'beanie-navy', name:'Beanie · Navy',  cat:'head', base:'beanie', col:'#46608C', col2:'#354B70' },
+    { id:'bandana-blue',name:'Bandana · Blue', cat:'head', base:'bandana',col:'#4A7FC1', col2:'#35639B' },
+    { id:'visor',       name:'Sun Visor',      cat:'head', base:'visor',  col:'#F6C453', col2:'#D49E28' },
+    { id:'beret',       name:'Beret',          cat:'head', base:'beret',  col:'#D9434F', col2:'#B32F3C' },
+    { id:'pirate',      name:'Pirate Hat',     cat:'head', base:'pirate', col:'#2E2A28', col2:'#FFFFFF' },
+
+    /* ---------- new: eyewear ---------- */
+    { id:'shades-blue',  name:'Shades · Blue',  cat:'eyes', base:'shades', col:'#2E5F8C', col2:'#1E466E' },
+    { id:'shades-pink',  name:'Shades · Pink',  cat:'eyes', base:'shades', col:'#E86A8C', col2:'#C24A6C' },
+    { id:'heart-glass',  name:'Heart Glasses',  cat:'eyes', base:'heart',  col:'#F49097', col2:'#D9727C' },
+    { id:'star-glass',   name:'Star Glasses',   cat:'eyes', base:'star',   col:'#F6C453', col2:'#D49E28' },
+    { id:'round-gold',   name:'Round · Gold',   cat:'eyes', base:'round',  col:'#D9A82E', col2:'#B3861E' },
+    { id:'round-black',  name:'Round · Black',  cat:'eyes', base:'round',  col:'#3A3A3A', col2:'#222222' },
+    { id:'aviators',     name:'Aviators',       cat:'eyes', base:'aviator',col:'#C9A23E', col2:'#6E7B84' },
+    { id:'goggles-ski',  name:'Ski Goggles',    cat:'eyes', base:'goggle', col:'#E8553F', col2:'#7EC8E3' },
+    { id:'goggles-swim', name:'Swim Goggles',   cat:'eyes', base:'goggle', col:'#4A7FC1', col2:'#BFE6F5' },
+    { id:'threed',       name:'3D Glasses',     cat:'eyes', base:'threed', col:'#E8553F', col2:'#4A7FC1' },
+
+    /* ---------- new: collars ---------- */
+    { id:'collar-red',   name:'Collar · Red',    cat:'collar', base:'collar', col:'#D9434F', col2:'#F6C453' },
+    { id:'collar-blue',  name:'Collar · Blue',   cat:'collar', base:'collar', col:'#4A7FC1', col2:'#F6C453' },
+    { id:'collar-green', name:'Collar · Green',  cat:'collar', base:'collar', col:'#6FAF7E', col2:'#F6C453' },
+    { id:'collar-spike', name:'Spiked Collar',   cat:'collar', base:'spike',  col:'#3A312C', col2:'#C9C9C9' },
+    { id:'bowtie-blue',  name:'Bow Tie · Blue',  cat:'collar', base:'bowtie', col:'#4A7FC1', col2:'#35639B' },
+    { id:'bowtie-green', name:'Bow Tie · Green', cat:'collar', base:'bowtie', col:'#6FAF7E', col2:'#4E8A5C' },
+    { id:'bowtie-gold',  name:'Bow Tie · Gold',  cat:'collar', base:'bowtie', col:'#F6C453', col2:'#C99418' },
+    { id:'necktie',      name:'Necktie',         cat:'collar', base:'tie',    col:'#8B3A3A', col2:'#6B2A2A' },
+    { id:'scarf-red',    name:'Scarf · Red',     cat:'collar', base:'scarf',  col:'#D9434F', col2:'#B32F3C' },
+    { id:'scarf-green',  name:'Scarf · Green',   cat:'collar', base:'scarf',  col:'#6FAF7E', col2:'#4E8A5C' },
+    { id:'medal',        name:'Gold Medal',      cat:'collar', base:'medal',  col:'#F6C453', col2:'#C99418' },
+    { id:'lei',          name:'Flower Lei',      cat:'collar', base:'lei',    col:'#F49097', col2:'#F6C453' },
+    { id:'pearls',       name:'Pearls',          cat:'collar', base:'pearls', col:'#FBF6EE', col2:'#DED5C6' },
+
+    /* ---------- new: earrings ---------- */
+    { id:'hoop-gold',    name:'Hoop · Gold',     cat:'ears', base:'hoop',   col:'#E8B93E' },
+    { id:'hoop-silver',  name:'Hoop · Silver',   cat:'ears', base:'hoop',   col:'#C9CDD2' },
+    { id:'hoop-big',     name:'Big Hoops',       cat:'ears', base:'hoopbig',col:'#E8B93E' },
+    { id:'stud-gold',    name:'Stud · Gold',     cat:'ears', base:'stud',   col:'#E8B93E' },
+    { id:'stud-diamond', name:'Stud · Diamond',  cat:'ears', base:'stud',   col:'#CFE8F5' },
+    { id:'stud-ruby',    name:'Stud · Ruby',     cat:'ears', base:'stud',   col:'#D9434F' },
+    { id:'stud-emerald', name:'Stud · Emerald',  cat:'ears', base:'stud',   col:'#4E9A6A' },
+    { id:'drop-pearl',   name:'Pearl Drop',      cat:'ears', base:'drop',   col:'#FBF6EE', col2:'#DED5C6' },
+    { id:'drop-blue',    name:'Blue Drop',       cat:'ears', base:'drop',   col:'#6FB1D9', col2:'#4A8DB5' },
+    { id:'drop-pink',    name:'Pink Drop',       cat:'ears', base:'drop',   col:'#F49097', col2:'#D9727C' },
+    { id:'star-ear',     name:'Star Studs',      cat:'ears', base:'starear',col:'#F6C453' },
+    { id:'heart-ear',    name:'Heart Studs',     cat:'ears', base:'heartear',col:'#F49097' },
+    { id:'bone-ear',     name:'Bone Charms',     cat:'ears', base:'bone',   col:'#FBF6EE', col2:'#D8CDBA' },
+    { id:'paw-ear',      name:'Paw Charms',      cat:'ears', base:'pawear', col:'#E8B93E' },
+    { id:'bell-ear',     name:'Little Bells',    cat:'ears', base:'bell',   col:'#F6C453', col2:'#C99418' }
+  ];
+
 
   /* Accessories that sit on top of the head. The poodle topknot and the
      fluffy-breed crown are drawn BEFORE the face, so without this they poke
@@ -1626,7 +1884,11 @@
      these is worn the crown fluff is suppressed. */
   var ACC_ON_CROWN = {
     cowboy:1, cap:1, crown:1, party:1, beanie:1, santa:1, tophat:1, viking:1,
-    bunny:1, chef:1, graduate:1, headphones:1, bandana:1, headband:1, clown:1
+    bunny:1, chef:1, graduate:1, headphones:1, bandana:1, headband:1, clown:1,
+    /* the newer hats sit on the crown as well */
+    'cap-blue':1, 'cap-purple':1, 'cap-green':1, 'cap-red':1,
+    'beanie-pink':1, 'beanie-navy':1, 'bandana-blue':1,
+    visor:1, beret:1, pirate:1
   };
 
   var STARS_PER_UNLOCK = 25;
@@ -1871,7 +2133,288 @@
 
   /* Accessories are drawn in the same 100x100 space and layered last, so any
      accessory sits correctly on any breed without per-pair artwork. */
+/* Draws the chosen marker. Everything sits in a 100x100 box inside the
+     pressed-in tile, so swapping markers never changes how a ruled-out square
+     reads - only how it looks. */
+  function markerArt(id, col){
+    var c = col || '#FFFFFF';
+    switch(id){
+      case 'paw':
+        return '<circle cx="50" cy="58" r="20" fill="' + c + '"/>' +
+               '<ellipse cx="30" cy="34" rx="9" ry="11" fill="' + c + '"/>' +
+               '<ellipse cx="50" cy="26" rx="9.5" ry="12" fill="' + c + '"/>' +
+               '<ellipse cx="70" cy="34" rx="9" ry="11" fill="' + c + '"/>' +
+               '<ellipse cx="82" cy="52" rx="8" ry="9" fill="' + c + '"/>';
+
+      case 'twigs':
+        return '<path d="M20 22 L78 80" stroke="' + c + '" stroke-width="13" stroke-linecap="round"/>' +
+               '<path d="M80 22 L22 80" stroke="' + c + '" stroke-width="13" stroke-linecap="round"/>' +
+               '<path d="M36 38 l-11 -9 M66 62 l11 9" stroke="' + c + '" stroke-width="7" stroke-linecap="round"/>' +
+               '<path d="M64 38 l11 -9 M34 62 l-11 9" stroke="#6B4A2B" stroke-width="6" stroke-linecap="round" opacity=".6"/>';
+
+      case 'tennis':
+        return '<circle cx="50" cy="50" r="33" fill="' + c + '"/>' +
+               '<path d="M20 30 q16 20 0 40" stroke="#FFFFFF" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+               '<path d="M80 30 q-16 20 0 40" stroke="#FFFFFF" stroke-width="5" fill="none" stroke-linecap="round"/>';
+
+      case 'bone':
+        return '<g transform="rotate(-28 50 50)">' +
+               '<rect x="26" y="42" width="48" height="16" rx="8" fill="' + c + '"/>' +
+               '<circle cx="28" cy="41" r="11" fill="' + c + '"/><circle cx="28" cy="59" r="11" fill="' + c + '"/>' +
+               '<circle cx="72" cy="41" r="11" fill="' + c + '"/><circle cx="72" cy="59" r="11" fill="' + c + '"/></g>';
+
+      case 'chalk':
+        return '<path d="M24 24 L76 76" stroke="' + c + '" stroke-width="15" stroke-linecap="round" opacity=".92"/>' +
+               '<path d="M76 24 L24 76" stroke="' + c + '" stroke-width="15" stroke-linecap="round" opacity=".92"/>' +
+               '<path d="M30 28 L70 70" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity=".45"/>';
+
+      case 'daisy':
+        return [0,72,144,216,288].map(function(a){
+          var r = a * Math.PI / 180;
+          return '<ellipse cx="' + (50 + Math.cos(r)*21).toFixed(1) + '" cy="' + (50 + Math.sin(r)*21).toFixed(1) +
+                 '" rx="11" ry="15" fill="' + c + '" transform="rotate(' + (a+90) + ' ' +
+                 (50 + Math.cos(r)*21).toFixed(1) + ' ' + (50 + Math.sin(r)*21).toFixed(1) + ')"/>';
+        }).join('') + '<circle cx="50" cy="50" r="11" fill="#F6C453"/>';
+
+      case 'hydrant':
+        return '<rect x="38" y="26" width="24" height="52" rx="8" fill="' + c + '"/>' +
+               '<rect x="26" y="40" width="48" height="12" rx="6" fill="' + c + '"/>' +
+               '<rect x="32" y="74" width="36" height="9" rx="4.5" fill="' + c + '"/>' +
+               '<circle cx="50" cy="24" r="8" fill="' + c + '"/>' +
+               '<circle cx="50" cy="46" r="5" fill="#FFFFFF" opacity=".55"/>';
+
+      case 'biscuit':
+        return '<g transform="rotate(18 50 50)">' +
+               '<rect x="24" y="40" width="52" height="20" rx="9" fill="' + c + '"/>' +
+               '<circle cx="27" cy="39" r="10" fill="' + c + '"/><circle cx="27" cy="61" r="10" fill="' + c + '"/>' +
+               '<circle cx="73" cy="39" r="10" fill="' + c + '"/><circle cx="73" cy="61" r="10" fill="' + c + '"/>' +
+               '<circle cx="42" cy="50" r="3" fill="#B8894A" opacity=".55"/>' +
+               '<circle cx="58" cy="47" r="2.6" fill="#B8894A" opacity=".55"/></g>';
+
+      case 'stitch':
+        return '<path d="M26 26 L74 74" stroke="' + c + '" stroke-width="11" stroke-linecap="round" stroke-dasharray="13 7"/>' +
+               '<path d="M74 26 L26 74" stroke="' + c + '" stroke-width="11" stroke-linecap="round" stroke-dasharray="13 7"/>';
+
+      case 'nopups':
+        return '<circle cx="50" cy="50" r="31" fill="none" stroke="' + c + '" stroke-width="11"/>' +
+               '<path d="M28 28 L72 72" stroke="' + c + '" stroke-width="11" stroke-linecap="round"/>';
+
+      case 'frisbee':
+        return '<ellipse cx="50" cy="52" rx="34" ry="24" fill="' + c + '"/>' +
+               '<ellipse cx="50" cy="48" rx="34" ry="24" fill="#FFFFFF" opacity=".28"/>' +
+               '<ellipse cx="50" cy="49" rx="18" ry="12" fill="#FFFFFF" opacity=".35"/>';
+
+      case 'pebble':
+        return '<ellipse cx="50" cy="52" rx="33" ry="27" fill="' + c + '"/>' +
+               '<ellipse cx="42" cy="44" rx="14" ry="9" fill="#FFFFFF" opacity=".25"/>' +
+               '<path d="M36 38 L64 66 M64 38 L36 66" stroke="#6F6960" stroke-width="7" stroke-linecap="round" opacity=".8"/>';
+
+      default:   /* the original cross */
+        return '<path d="M26 26 L74 74" stroke="#FFFFFF" stroke-width="19" stroke-linecap="round"/>' +
+               '<path d="M74 26 L26 74" stroke="#FFFFFF" stroke-width="19" stroke-linecap="round"/>';
+    }
+  }
+
+  function markerHTML(){
+    var id = (collection && collection.marker) || 'x';
+    var rec = null;
+    for(var i=0;i<MARKERS.length;i++){ if(MARKERS[i].id === id){ rec = MARKERS[i]; break; } }
+    if(!rec || (!rec.free && !ownsMarker(id))){ id = 'x'; rec = MARKERS[0]; }
+    var art = markerArt(id, rec.col);
+    var cls = id === 'x' ? 'mark-x' : 'mark-x mark-art';
+    return '<span class="' + cls + '">' +
+           '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+           art + '</svg></span>';
+  }
+
+  function activeTheme(){
+    var id = (collection && collection.theme) || 'classic';
+    for(var i=0;i<THEMES.length;i++){
+      if(THEMES[i].id === id){
+        /* an unowned theme falls back rather than showing something unpaid */
+        if(THEMES[i].free || ownsTheme(id)) return THEMES[i];
+        break;
+      }
+    }
+    return THEMES[0];
+  }
+
+  var ACC_BY_ID = {};
+
+  /* Routes to the original hand-drawn art for the first 25, or to a
+     parameterised shape for everything added since. */
   function accessorySVG(id){
+    if(!id) return '';
+    if(!ACC_BY_ID[id]){
+      ACCESSORIES.forEach(function(a){ ACC_BY_ID[a.id] = a; });
+    }
+    var rec = ACC_BY_ID[id];
+    if(rec && rec.base) return accessoryShape(rec.base, rec.col, rec.col2);
+    return accessoryLegacy(id);
+  }
+
+/* Parameterised shapes for the newer accessories. One definition per shape,
+     coloured by the catalogue entry - so a cap in four colours is four data
+     rows, not four drawings. The original 25 keep their own hand-drawn art in
+     accessoryLegacy() and are never routed through here. */
+  function accessoryShape(base, a, b){
+    b = b || a;
+    switch(base){
+      /* ---------- head ---------- */
+      case 'cap': return '<g><path d="M22 26 q2 -20 28 -20 q26 0 28 20 z" fill="' + a + '"/>' +
+        '<path d="M20 26 q18 6 38 0 q10 1 16 7 q-28 6 -54 -7z" fill="' + b + '"/>' +
+        '<circle cx="50" cy="8" r="3" fill="' + b + '"/></g>';
+
+      case 'beanie': return '<g><path d="M22 28 q2 -22 28 -22 q26 0 28 22 z" fill="' + a + '"/>' +
+        '<rect x="20" y="25" width="60" height="8" rx="4" fill="' + b + '"/>' +
+        '<circle cx="50" cy="5" r="5" fill="#FBF6EE"/></g>';
+
+      case 'bandana': return '<g><path d="M19 22 q31 11 62 0 l-3 9 q-28 9 -56 0z" fill="' + a + '"/>' +
+        '<path d="M78 24 l9 7 -3 6 -8 -8z" fill="' + b + '"/>' +
+        '<circle cx="33" cy="26" r="1.9" fill="#fff" opacity=".75"/>' +
+        '<circle cx="50" cy="29" r="1.9" fill="#fff" opacity=".75"/>' +
+        '<circle cx="66" cy="26" r="1.9" fill="#fff" opacity=".75"/></g>';
+
+      case 'visor': return '<g><path d="M20 28 q18 6 38 0 q11 1 17 8 q-30 7 -57 -8z" fill="' + a + '"/>' +
+        '<rect x="20" y="22" width="60" height="7" rx="3.5" fill="' + b + '"/></g>';
+
+      case 'beret': return '<g><ellipse cx="50" cy="20" rx="27" ry="14" fill="' + a + '"/>' +
+        '<rect x="26" y="23" width="48" height="6" rx="3" fill="' + b + '"/>' +
+        '<circle cx="58" cy="8" r="4" fill="' + b + '"/></g>';
+
+      case 'pirate': return '<g><path d="M14 26 q36 -22 72 0 q-36 10 -72 0z" fill="' + a + '"/>' +
+        '<circle cx="50" cy="16" r="5" fill="' + b + '"/>' +
+        '<path d="M45 22 l10 6 M55 22 l-10 6" stroke="' + b + '" stroke-width="2.4" stroke-linecap="round"/></g>';
+
+      /* ---------- eyewear ---------- */
+      case 'shades': return '<g><rect x="24" y="38" width="52" height="4" rx="2" fill="' + b + '"/>' +
+        '<rect x="24" y="38" width="22" height="14" rx="6" fill="' + a + '"/>' +
+        '<rect x="54" y="38" width="22" height="14" rx="6" fill="' + a + '"/>' +
+        '<rect x="27" y="41" width="7" height="4" rx="2" fill="#fff" opacity=".4"/></g>';
+
+      case 'heart': return '<g><path d="M26 40 q4 -7 10 -2 q6 -5 10 2 q0 7 -10 13 q-10 -6 -10 -13z" fill="' + a + '"/>' +
+        '<path d="M54 40 q4 -7 10 -2 q6 -5 10 2 q0 7 -10 13 q-10 -6 -10 -13z" fill="' + a + '"/>' +
+        '<path d="M46 44 h8" stroke="' + b + '" stroke-width="3" stroke-linecap="round"/></g>';
+
+      case 'star': return '<g>' + starPath(36, 45, 11, a) + starPath(64, 45, 11, a) +
+        '<path d="M47 45 h6" stroke="' + b + '" stroke-width="3" stroke-linecap="round"/></g>';
+
+      case 'round': return '<g><circle cx="36" cy="45" r="10" fill="none" stroke="' + a + '" stroke-width="3.2"/>' +
+        '<circle cx="64" cy="45" r="10" fill="none" stroke="' + a + '" stroke-width="3.2"/>' +
+        '<path d="M46 45 h8" stroke="' + a + '" stroke-width="3"/>' +
+        '<circle cx="36" cy="45" r="8.4" fill="#CFE8F5" opacity=".3"/>' +
+        '<circle cx="64" cy="45" r="8.4" fill="#CFE8F5" opacity=".3"/></g>';
+
+      case 'aviator': return '<g><path d="M24 40 q0 13 12 13 q11 0 12 -13z" fill="' + b + '" opacity=".75"/>' +
+        '<path d="M52 40 q0 13 12 13 q11 0 12 -13z" fill="' + b + '" opacity=".75"/>' +
+        '<path d="M22 39 h56" stroke="' + a + '" stroke-width="3" stroke-linecap="round"/>' +
+        '<path d="M46 41 q4 -3 8 0" stroke="' + a + '" stroke-width="2.4" fill="none"/></g>';
+
+      case 'goggle': return '<g><rect x="22" y="36" width="56" height="18" rx="9" fill="' + a + '"/>' +
+        '<rect x="27" y="39" width="18" height="12" rx="6" fill="' + b + '"/>' +
+        '<rect x="55" y="39" width="18" height="12" rx="6" fill="' + b + '"/>' +
+        '<rect x="16" y="42" width="8" height="5" rx="2.5" fill="' + a + '"/>' +
+        '<rect x="76" y="42" width="8" height="5" rx="2.5" fill="' + a + '"/></g>';
+
+      case 'threed': return '<g><rect x="24" y="38" width="52" height="4" rx="2" fill="#2E2A28"/>' +
+        '<rect x="24" y="38" width="22" height="14" rx="4" fill="' + a + '" opacity=".72"/>' +
+        '<rect x="54" y="38" width="22" height="14" rx="4" fill="' + b + '" opacity=".72"/></g>';
+
+      /* ---------- collars ---------- */
+      case 'collar': return '<g><path d="M16 84 q34 14 68 0 l0 10 q-34 12 -68 0z" fill="' + a + '"/>' +
+        '<circle cx="50" cy="97" r="6" fill="' + b + '"/>' +
+        '<circle cx="50" cy="97" r="2.4" fill="#fff" opacity=".45"/></g>';
+
+      case 'spike': return '<g><path d="M16 84 q34 14 68 0 l0 10 q-34 12 -68 0z" fill="' + a + '"/>' +
+        '<path d="M28 88 l4 -7 4 7z M46 92 l4 -7 4 7z M64 88 l4 -7 4 7z" fill="' + b + '"/></g>';
+
+      case 'bowtie': return '<g><path d="M50 88 l-14 -7 v14 z" fill="' + a + '"/>' +
+        '<path d="M50 88 l14 -7 v14 z" fill="' + a + '"/>' +
+        '<circle cx="50" cy="88" r="4" fill="' + b + '"/></g>';
+
+      case 'tie': return '<g><path d="M44 80 l6 -5 6 5 -3 5 -6 0z" fill="' + b + '"/>' +
+        '<path d="M47 90 l3 -5 3 5 -1 14 -4 0z" fill="' + a + '"/></g>';
+
+      case 'scarf': return '<g><path d="M18 84 q32 12 64 0 l0 12 q-32 10 -64 0z" fill="' + a + '"/>' +
+        '<path d="M64 92 l10 14 8 -3 -8 -13z" fill="' + b + '"/></g>';
+
+      case 'medal': return '<g><path d="M40 80 l8 14 M60 80 l-8 14" stroke="' + b + '" stroke-width="3.5"/>' +
+        '<circle cx="50" cy="96" r="8" fill="' + a + '" stroke="' + b + '" stroke-width="2"/>' +
+        '<circle cx="50" cy="96" r="3.4" fill="' + b + '" opacity=".5"/></g>';
+
+      case 'lei': return '<g>' +
+        [[22,86],[32,92],[44,95],[56,95],[68,92],[78,86]].map(function(p,i){
+          return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="5" fill="' + (i%2 ? b : a) + '"/>';
+        }).join('') + '</g>';
+
+      case 'pearls': return '<g>' +
+        [[22,85],[31,91],[41,95],[50,96],[59,95],[69,91],[78,85]].map(function(p){
+          return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="4.2" fill="' + a +
+                 '" stroke="' + b + '" stroke-width="1"/>';
+        }).join('') + '</g>';
+
+      /* ---------- earrings ----------
+         Placed low on both ears, the one spot every ear shape covers. */
+      case 'hoop': return earPair(function(x, y){
+        return '<circle cx="' + x + '" cy="' + (y+6) + '" r="5.5" fill="none" stroke="' + a + '" stroke-width="2.4"/>' +
+               '<circle cx="' + x + '" cy="' + y + '" r="2" fill="' + a + '"/>';
+      });
+      case 'hoopbig': return earPair(function(x, y){
+        return '<circle cx="' + x + '" cy="' + (y+9) + '" r="9" fill="none" stroke="' + a + '" stroke-width="2.6"/>' +
+               '<circle cx="' + x + '" cy="' + y + '" r="2" fill="' + a + '"/>';
+      });
+      case 'stud': return earPair(function(x, y){
+        return '<circle cx="' + x + '" cy="' + y + '" r="4" fill="' + a + '"/>' +
+               '<circle cx="' + (x-1.2) + '" cy="' + (y-1.2) + '" r="1.3" fill="#fff" opacity=".6"/>';
+      });
+      case 'drop': return earPair(function(x, y){
+        return '<circle cx="' + x + '" cy="' + y + '" r="2.4" fill="' + b + '"/>' +
+               '<ellipse cx="' + x + '" cy="' + (y+8) + '" rx="4.4" ry="6" fill="' + a + '"/>' +
+               '<ellipse cx="' + (x-1.4) + '" cy="' + (y+6) + '" rx="1.3" ry="2" fill="#fff" opacity=".5"/>';
+      });
+      case 'starear': return earPair(function(x, y){ return starPath(x, y+2, 6, a); });
+      case 'heartear': return earPair(function(x, y){
+        return '<path d="M' + (x-5) + ' ' + y + ' q2 -4 5 -1 q3 -3 5 1 q0 4 -5 7 q-5 -3 -5 -7z" fill="' + a + '"/>';
+      });
+      case 'bone': return earPair(function(x, y){
+        return '<g transform="rotate(-35 ' + x + ' ' + (y+4) + ')">' +
+               '<rect x="' + (x-5) + '" y="' + (y+2) + '" width="10" height="3.4" rx="1.7" fill="' + a + '"/>' +
+               '<circle cx="' + (x-5) + '" cy="' + (y+2) + '" r="2.4" fill="' + a + '"/>' +
+               '<circle cx="' + (x-5) + '" cy="' + (y+5.4) + '" r="2.4" fill="' + a + '"/>' +
+               '<circle cx="' + (x+5) + '" cy="' + (y+2) + '" r="2.4" fill="' + a + '"/>' +
+               '<circle cx="' + (x+5) + '" cy="' + (y+5.4) + '" r="2.4" fill="' + a + '"/></g>';
+      });
+      case 'pawear': return earPair(function(x, y){
+        return '<circle cx="' + x + '" cy="' + (y+4) + '" r="3.4" fill="' + a + '"/>' +
+               '<circle cx="' + (x-3.2) + '" cy="' + y + '" r="1.5" fill="' + a + '"/>' +
+               '<circle cx="' + x + '" cy="' + (y-1.4) + '" r="1.5" fill="' + a + '"/>' +
+               '<circle cx="' + (x+3.2) + '" cy="' + y + '" r="1.5" fill="' + a + '"/>';
+      });
+      case 'bell': return earPair(function(x, y){
+        return '<path d="M' + (x-4.5) + ' ' + (y+7) + ' q0 -7 4.5 -7 q4.5 0 4.5 7z" fill="' + a + '"/>' +
+               '<rect x="' + (x-5.5) + '" y="' + (y+7) + '" width="11" height="2.2" rx="1.1" fill="' + b + '"/>' +
+               '<circle cx="' + x + '" cy="' + (y+10.5) + '" r="1.6" fill="' + b + '"/>';
+      });
+    }
+    return '';
+  }
+
+  /* both ears, low on the head where every ear shape reaches */
+  function earPair(build){
+    return '<g>' + build(20, 60) + build(80, 60) + '</g>';
+  }
+
+  function starPath(cx, cy, r, fill){
+    var pts = [];
+    for(var i=0;i<10;i++){
+      var rad = (i % 2 === 0) ? r : r * 0.45;
+      var ang = (Math.PI / 5) * i - Math.PI / 2;
+      pts.push((cx + Math.cos(ang) * rad).toFixed(1) + ',' + (cy + Math.sin(ang) * rad).toFixed(1));
+    }
+    return '<polygon points="' + pts.join(' ') + '" fill="' + fill + '"/>';
+  }
+
+  function accessoryLegacy(id){
     switch(id){
       case 'sunglasses': return '<g><rect x="24" y="38" width="52" height="4" rx="2" fill="#222"/>' +
         '<rect x="24" y="38" width="22" height="14" rx="6" fill="#1A1A1A"/>' +
@@ -1990,6 +2533,7 @@
     gear:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3.4" stroke="#8B5E3C" stroke-width="1.8"/><path d="M19.3 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.8 1.8 0 1 1 2.6-2.6l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.8 1.8 0 1 1 3.6 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.4.9z" stroke="#8B5E3C" stroke-width="1.6" stroke-linejoin="round"/></svg>',
     book:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.8A1.8 1.8 0 0 1 4.8 3H9a3 3 0 0 1 3 3v13a2.2 2.2 0 0 0-2.2-2.2H4.8A1.8 1.8 0 0 1 3 16z" fill="#FFF3DE" stroke="#8B5E3C" stroke-width="1.5" stroke-linejoin="round"/><path d="M21 4.8A1.8 1.8 0 0 0 19.2 3H15a3 3 0 0 0-3 3v13a2.2 2.2 0 0 1 2.2-2.2h5A1.8 1.8 0 0 0 21 16z" fill="#FFE9C4" stroke="#8B5E3C" stroke-width="1.5" stroke-linejoin="round"/></svg>',
     pawprint:'<svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><ellipse cx="7" cy="8.4" rx="2.1" ry="2.8" fill="#8B5E3C"/><ellipse cx="12" cy="6.6" rx="2.2" ry="2.9" fill="#8B5E3C"/><ellipse cx="17" cy="8.4" rx="2.1" ry="2.8" fill="#8B5E3C"/><ellipse cx="19.8" cy="13" rx="1.8" ry="2.2" fill="#8B5E3C"/><ellipse cx="4.2" cy="13" rx="1.8" ry="2.2" fill="#8B5E3C"/><path d="M12 11.4c3.3 0 5.5 2.3 5.5 4.7S15.3 19.7 12 19.7 6.5 18.5 6.5 16.1 8.7 11.4 12 11.4z" fill="#8B5E3C"/></svg>',
+    bone:'<svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(-30 12 12)"><rect x="6" y="10" width="12" height="4" rx="2" fill="#E8C9A0" stroke="#B08A5C" stroke-width="1"/><circle cx="6.5" cy="9.6" r="2.6" fill="#E8C9A0" stroke="#B08A5C" stroke-width="1"/><circle cx="6.5" cy="14.4" r="2.6" fill="#E8C9A0" stroke="#B08A5C" stroke-width="1"/><circle cx="17.5" cy="9.6" r="2.6" fill="#E8C9A0" stroke="#B08A5C" stroke-width="1"/><circle cx="17.5" cy="14.4" r="2.6" fill="#E8C9A0" stroke="#B08A5C" stroke-width="1"/></g></svg>',
     bulb:'<svg class="btn-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 18h6M10 21h4" stroke="#8B5E3C" stroke-width="1.8" stroke-linecap="round"/><path d="M12 2.6a6.6 6.6 0 0 0-3.8 12 2.6 2.6 0 0 1 1 1.8v.6h5.6v-.6a2.6 2.6 0 0 1 1-1.8A6.6 6.6 0 0 0 12 2.6z" fill="#FFE08A" stroke="#C9891B" stroke-width="1.5" stroke-linejoin="round"/></svg>'
   };
 
@@ -2288,8 +2832,19 @@
       team: Array.isArray(col.team) && col.team.length ? col.team.slice(0, MAX_TEAM)
                                                        : ['poodle-brown','poodle-white'],
       worn: col.worn || {},          /* breedId -> accessoryId */
-      spent: col.spent || 0          /* stars already committed to unlocks */
+      themes: Array.isArray(col.themes) ? col.themes.slice() : [],
+      markers: Array.isArray(col.markers) ? col.markers.slice() : [],
+      theme: col.theme || 'classic',
+      marker: col.marker || 'x',
+      spent: col.spent || 0          /* legacy field, no longer used */
     };
+    /* the starter theme and marker are always owned */
+    THEMES.forEach(function(t){
+      if(t.free && collection.themes.indexOf(t.id) === -1) collection.themes.push(t.id);
+    });
+    MARKERS.forEach(function(m){
+      if(m.free && collection.markers.indexOf(m.id) === -1) collection.markers.push(m.id);
+    });
     /* the two starter poodles are always owned */
     BREEDS.forEach(function(b){
       if(b.free && collection.dogs.indexOf(b.id) === -1) collection.dogs.push(b.id);
@@ -2476,17 +3031,26 @@
   function spentStars(){
     var freeCount = 0;
     BREEDS.forEach(function(b){ if(b.free) freeCount++; });
-    var paidDogs = Math.max(0, collection.dogs.length - freeCount);
-    return (paidDogs + collection.accs.length) * STARS_PER_UNLOCK;
+    var freeThemes = 0, freeMarkers = 0;
+    THEMES.forEach(function(t){ if(t.free) freeThemes++; });
+    MARKERS.forEach(function(m){ if(m.free) freeMarkers++; });
+    var paidDogs    = Math.max(0, collection.dogs.length - freeCount);
+    var paidThemes  = Math.max(0, collection.themes.length - freeThemes);
+    var paidMarkers = Math.max(0, collection.markers.length - freeMarkers);
+    return (paidDogs + collection.accs.length + paidThemes + paidMarkers) * STARS_PER_UNLOCK;
   }
   function availableStars(){ return Math.max(0, totalStars() - spentStars()); }
 
   function ownsDog(id){ return collection.dogs.indexOf(id) !== -1; }
   function ownsAcc(id){ return collection.accs.indexOf(id) !== -1; }
+  function ownsTheme(id){ return collection.themes.indexOf(id) !== -1; }
+  function ownsMarker(id){ return collection.markers.indexOf(id) !== -1; }
 
   function unlock(kind, id){
     if(availableStars() < STARS_PER_UNLOCK) return false;
     if(kind === 'dog'){ if(ownsDog(id)) return false; collection.dogs.push(id); }
+    else if(kind === 'theme'){ if(ownsTheme(id)) return false; collection.themes.push(id); }
+    else if(kind === 'marker'){ if(ownsMarker(id)) return false; collection.markers.push(id); }
     else { if(ownsAcc(id)) return false; collection.accs.push(id); }
     save();
     if(cloud) pushScores();     /* get the purchase off this device at once */
@@ -2737,6 +3301,8 @@
       if(kennelChanged){
         paintHero();
         if(document.getElementById('screen-kennel').classList.contains('active')) renderKennel();
+        if(document.getElementById('screen-shop').classList.contains('active')) renderShop();
+        if(puzzle) renderBoard();
         showToast('Your dogs and accessories synced across');
       }
       if(gained > 0 || improved > 0){
@@ -2780,6 +3346,25 @@
 
     /* team and outfit: keep this device's choice if it is still valid,
        otherwise take the one from the cloud */
+    (cloudCol.themes || []).forEach(function(id){
+      if(collection.themes.indexOf(id) === -1 &&
+         THEMES.some(function(t){ return t.id === id; })){
+        collection.themes.push(id); changed = true;
+      }
+    });
+    (cloudCol.markers || []).forEach(function(id){
+      if(collection.markers.indexOf(id) === -1 &&
+         MARKERS.some(function(m){ return m.id === id; })){
+        collection.markers.push(id); changed = true;
+      }
+    });
+    if(cloudCol.theme && ownsTheme(cloudCol.theme) && collection.theme === 'classic'){
+      collection.theme = cloudCol.theme; changed = true;
+    }
+    if(cloudCol.marker && ownsMarker(cloudCol.marker) && collection.marker === 'x'){
+      collection.marker = cloudCol.marker; changed = true;
+    }
+
     var teamValid = collection.team.length &&
       collection.team.every(function(id){ return ownsDog(id); });
     if(!teamValid && Array.isArray(cloudCol.team) && cloudCol.team.length){
@@ -3229,7 +3814,11 @@
         dogs: collection.dogs.slice(),
         accs: collection.accs.slice(),
         team: collection.team.slice(),
-        worn: collection.worn || {}
+        worn: collection.worn || {},
+        themes: collection.themes.slice(),
+        markers: collection.markers.slice(),
+        theme: collection.theme,
+        marker: collection.marker
       }
     }).catch(function(){});
   }
@@ -3440,7 +4029,7 @@
   }
   paintHero();
   (function(){
-    var map = {'play-icon':ICONS.play, 'levels-icon':ICONS.grid, 'kennel-icon':ICONS.pawprint, 'lb-icon':ICONS.podium,
+    var map = {'play-icon':ICONS.play, 'levels-icon':ICONS.grid, 'kennel-icon':ICONS.pawprint, 'shop-icon':ICONS.bone, 'lb-icon':ICONS.podium,
                'settings-icon':ICONS.gear, 'howto-icon':ICONS.book,
                'hint-icon':ICONS.bulb, 'reveal-icon':ICONS.pawprint, 'rules-icon':ICONS.book};
     for(var id in map){ var el = document.getElementById(id); if(el) el.innerHTML = map[id]; }
@@ -3455,8 +4044,11 @@
   document.getElementById('btn-levels').onclick = function(){ renderLevelGrid(); showScreen('screen-levels'); };
   document.getElementById('btn-kennel').onclick = function(){ kennelTab='dogs'; renderKennel(); showScreen('screen-kennel'); };
   document.getElementById('btn-back-kennel').onclick = function(){ showScreen('screen-title'); };
-  document.getElementById('tab-dogs').onclick = function(){ kennelTab='dogs'; renderKennel(); };
-  document.getElementById('tab-accs').onclick = function(){ kennelTab='accs'; renderKennel(); };
+  document.getElementById('btn-shop').onclick = function(){ shopTab='acc'; renderShop(); showScreen('screen-shop'); };
+  document.getElementById('btn-back-shop').onclick = function(){ showScreen('screen-title'); };
+  document.getElementById('tab-shop-acc').onclick  = function(){ shopTab='acc';  renderShop(); };
+  document.getElementById('tab-shop-yard').onclick = function(){ shopTab='yard'; renderShop(); };
+  document.getElementById('tab-shop-mark').onclick = function(){ shopTab='mark'; renderShop(); };
   document.getElementById('btn-leaderboard').onclick = function(){ lbMode='total'; renderLeaderboard(); showScreen('screen-leaderboard'); };
   document.getElementById('btn-settings').onclick = function(){
     updateCloudStatus(); updateAccountStatus(); diagnoseHaptics();
@@ -3781,55 +4373,80 @@
   }
 
   /* ================= KENNEL SCREEN ================= */
-  var kennelTab = 'dogs';
+  var kennelTab = 'dogs';   /* accessories moved to the Pet Shop */
 
   function renderKennel(){
-    document.getElementById('tab-dogs').classList.toggle('active', kennelTab === 'dogs');
-    document.getElementById('tab-accs').classList.toggle('active', kennelTab === 'accs');
-
     var bank = availableStars();
     document.getElementById('star-bank').textContent = '★ ' + bank;
 
     var hint = document.getElementById('kennel-hint');
-    if(kennelTab === 'dogs'){
+    {
       hint.innerHTML = 'Pick up to <b>' + MAX_TEAM + '</b> dogs to play with — ' +
-        collection.team.length + ' chosen. Locked dogs cost <b>★' + STARS_PER_UNLOCK + '</b>.';
-    } else {
+        collection.team.length + ' chosen. Locked cost <b>★' + STARS_PER_UNLOCK + '</b>.' +
+        '<br><span style="opacity:.75;">Hats and collars live in the Pet Shop.</span>';
+    }
+    if(false){ /* accessories now live in the Pet Shop */
       var wornCount = 0;
       for(var k in collection.worn){ if(collection.worn[k]) wornCount++; }
-      hint.innerHTML = 'Tap an accessory, then choose which of your dogs wears it. ' +
-        (wornCount ? wornCount + ' dressed up.' : 'Locked ones cost <b>★' + STARS_PER_UNLOCK + '</b>.');
+      var ownedAcc = 0;
+      ACCESSORIES.forEach(function(a){ if(ownsAcc(a.id)) ownedAcc++; });
+      hint.innerHTML = 'Scroll for hats, eyewear, collars and earrings. ' +
+        'Tap one, then pick which dog wears it.<br>' +
+        '<b>' + ownedAcc + '</b> of ' + ACCESSORIES.length + ' unlocked · ' +
+        'locked cost <b>★' + STARS_PER_UNLOCK + '</b>';
     }
 
-    var grid = document.getElementById('pick-grid');
-    grid.innerHTML = '';
-    var list = kennelTab === 'dogs' ? BREEDS : ACCESSORIES;
+    var wrap = document.getElementById('pick-grid');
+    wrap.innerHTML = '';
 
-    list.forEach(function(item){
-      var owned = kennelTab === 'dogs' ? ownsDog(item.id) : ownsAcc(item.id);
+    function tile(item, owned, isDog){
       var btn = document.createElement('button');
       var cls = 'pick';
       if(!owned){
         cls += ' locked';
         if(bank >= STARS_PER_UNLOCK) cls += ' affordable';
-      } else if(kennelTab === 'dogs' && teamHas(item.id)){
+      } else if(isDog && teamHas(item.id)){
+        cls += ' chosen';
+      } else if(!isDog && wornByAnyone(item.id)){
         cls += ' chosen';
       }
       btn.className = cls;
       btn.dataset.cost = STARS_PER_UNLOCK;
       btn.title = item.name;
-
-      if(kennelTab === 'dogs'){
+      if(isDog){
         btn.innerHTML = dogSVG(item.id, owned ? collection.worn[item.id] : null, 'k' + item.id);
       } else {
-        /* show the accessory on your first dog so you can see what you're buying */
         var model = collection.team[0] || 'poodle-brown';
         btn.innerHTML = dogSVG(model, item.id, 'ka' + item.id);
       }
-
       btn.onclick = function(){ onPickTap(item, owned); };
-      grid.appendChild(btn);
-    });
+      return btn;
+    }
+
+    if(kennelTab === 'dogs'){
+      var g = document.createElement('div');
+      g.className = 'pick-grid-inner';
+      BREEDS.forEach(function(b){ g.appendChild(tile(b, ownsDog(b.id), true)); });
+      wrap.appendChild(g);
+    } else {
+      /* 73 accessories is far too many for one wall of icons, so they are
+         split into sections with a running owned-count on each heading. */
+      ACC_CATS.forEach(function(cat){
+        var items = ACCESSORIES.filter(function(a){ return (a.cat || 'head') === cat.id; });
+        if(!items.length) return;
+        var owned = items.filter(function(a){ return ownsAcc(a.id); }).length;
+
+        var head = document.createElement('div');
+        head.className = 'band-label';
+        head.textContent = cat.name + ' · ' + owned + '/' + items.length;
+        wrap.appendChild(head);
+
+        var grid = document.createElement('div');
+        grid.className = 'pick-grid-inner';
+        items.forEach(function(a){ grid.appendChild(tile(a, ownsAcc(a.id), false)); });
+        wrap.appendChild(grid);
+      });
+    }
 
     renderTeamBar();
   }
@@ -3837,8 +4454,8 @@
   /* Renders the two in-game slots. Tapping a slot jumps to what you would
      want to change: the dog if you are on the Dogs tab, its accessory if you
      are on Accessories. */
-  function renderTeamBar(){
-    var el = document.getElementById('team-bar');
+  function renderTeamBar(targetId){
+    var el = document.getElementById(targetId || 'team-bar');
     if(!el) return;
     el.innerHTML = '';
 
@@ -3859,21 +4476,21 @@
             }
           }
           btn.innerHTML =
-            '<span class="tdog">' + dogSVG(id, accId, 'team' + i) + '</span>' +
+            '<span class="tdog">' + dogSVG(id, accId, (targetId||'team') + i) + '</span>' +
             '<span style="min-width:0;">' +
               '<span class="tname">' + escapeHtml(b ? b.name : id) + '</span>' +
               '<span class="tacc">' + (accName ? escapeHtml(accName) : 'no accessory') + '</span>' +
             '</span>';
           btn.onclick = function(){
             if(kennelTab === 'accs'){
-              showToast('Tap an accessory above to put it on ' + (b ? b.name : 'this dog'));
+              showToast('Tap an accessory below to put it on ' + (b ? b.name : 'this dog'));
             } else {
               /* scroll the grid to this dog so it is obvious which one it is */
               var grid = document.getElementById('pick-grid');
               var idx = BREEDS.map(function(x){ return x.id; }).indexOf(id);
               var tile = grid && grid.children[idx];
               if(tile && tile.scrollIntoView) tile.scrollIntoView({block:'center', behavior:'smooth'});
-              showToast((b ? b.name : 'This dog') + ' — tap it above to swap out');
+              showToast((b ? b.name : 'This dog') + ' — tap it below to swap out');
             }
           };
         } else {
@@ -3881,16 +4498,23 @@
             '<span class="tdog">+</span>' +
             '<span style="min-width:0;">' +
               '<span class="tname">Empty slot</span>' +
-              '<span class="tacc">pick a dog above</span>' +
+              '<span class="tacc">pick a dog below</span>' +
             '</span>';
           btn.onclick = function(){
             kennelTab = 'dogs'; renderKennel();
-            showToast('Tap any dog to add it');
+            showToast('Tap any dog below to add it');
           };
         }
         el.appendChild(btn);
       })(i);
     }
+  }
+
+  function wornByAnyone(accId){
+    for(var i=0;i<collection.team.length;i++){
+      if(collection.worn[collection.team[i]] === accId) return true;
+    }
+    return false;
   }
 
   function onPickTap(item, owned){
@@ -4018,6 +4642,182 @@
     var m = readHidden();
     if(on) m[id] = true; else delete m[id];
     writeHidden(m);
+  }
+
+  /* ================= PET SHOP ================= */
+  var shopTab = 'acc';
+
+  function renderShop(){
+    ['acc','yard','mark'].forEach(function(t){
+      var el = document.getElementById('tab-shop-' + t);
+      if(el) el.classList.toggle('active', shopTab === t);
+    });
+    var bank = availableStars();
+    document.getElementById('shop-bank').textContent = '★ ' + bank;
+
+    var hint = document.getElementById('shop-hint');
+    var grid = document.getElementById('shop-grid');
+    grid.innerHTML = '';
+
+    if(shopTab === 'acc')       renderShopAccessories(grid, hint, bank);
+    else if(shopTab === 'yard') renderShopThemes(grid, hint, bank);
+    else                        renderShopMarkers(grid, hint, bank);
+
+    renderTeamBar('shop-team');
+  }
+
+  function renderShopAccessories(wrap, hint, bank){
+    var owned = 0;
+    ACCESSORIES.forEach(function(a){ if(ownsAcc(a.id)) owned++; });
+    hint.innerHTML = 'Tap one, then pick which dog wears it.<br>' +
+      '<b>' + owned + '</b> of ' + ACCESSORIES.length + ' unlocked · locked cost <b>★' + STARS_PER_UNLOCK + '</b>';
+
+    ACC_CATS.forEach(function(cat){
+      var items = ACCESSORIES.filter(function(a){ return (a.cat || 'head') === cat.id; });
+      if(!items.length) return;
+      var have = items.filter(function(a){ return ownsAcc(a.id); }).length;
+
+      var head = document.createElement('div');
+      head.className = 'band-label';
+      head.textContent = cat.name + ' · ' + have + '/' + items.length;
+      wrap.appendChild(head);
+
+      var g = document.createElement('div');
+      g.className = 'pick-grid-inner';
+      items.forEach(function(a){
+        var has = ownsAcc(a.id);
+        var btn = document.createElement('button');
+        var cls = 'pick';
+        if(!has){ cls += ' locked'; if(bank >= STARS_PER_UNLOCK) cls += ' affordable'; }
+        else if(wornByAnyone(a.id)) cls += ' chosen';
+        btn.className = cls;
+        btn.dataset.cost = STARS_PER_UNLOCK;
+        btn.title = a.name;
+        btn.innerHTML = dogSVG(collection.team[0] || 'poodle-brown', a.id, 'sa' + a.id);
+        btn.onclick = function(){
+          if(!has){ confirmBuy(a, 'acc', dogSVG(collection.team[0] || 'poodle-brown', a.id, 'bu')); return; }
+          chooseWearer(a);
+        };
+        g.appendChild(btn);
+      });
+      wrap.appendChild(g);
+    });
+  }
+
+  /* A theme swatch shows nine real yard colours on the real board surface -
+     a single block of colour would tell you nothing about whether the yards
+     stay tellable apart, which is the only thing that matters. */
+  function themeSwatch(t){
+    var s = '';
+    for(var i=0;i<9;i++) s += '<i style="background:' + t.cols[i] + '"></i>';
+    return s;
+  }
+
+  function renderShopThemes(wrap, hint, bank){
+    var owned = collection.themes.length;
+    hint.innerHTML = 'Repaint the board. Tap to wear, tap again to keep it.<br>' +
+      '<b>' + owned + '</b> of ' + THEMES.length + ' unlocked · locked cost <b>★' + STARS_PER_UNLOCK + '</b>';
+
+    var g = document.createElement('div');
+    g.className = 'shop-grid-3';
+    THEMES.forEach(function(t){
+      var has = t.free || ownsTheme(t.id);
+      var btn = document.createElement('button');
+      var cls = 'swatch';
+      if(!has){ cls += ' locked'; if(bank >= STARS_PER_UNLOCK) cls += ' affordable'; }
+      else if(collection.theme === t.id) cls += ' chosen';
+      btn.className = cls;
+      btn.dataset.cost = STARS_PER_UNLOCK;
+      btn.style.background = t.board;
+      btn.style.padding = '3px';
+      btn.style.gap = '2px';
+      btn.innerHTML = themeSwatch(t) + '<span class="swatch-name">' + escapeHtml(t.name) + '</span>';
+      btn.onclick = function(){
+        if(!has){ confirmBuy(t, 'theme', null, t); return; }
+        collection.theme = t.id; save();
+        if(cloud) pushScores();
+        SFX.mark(); HAPTIC.mark();
+        renderShop();
+        showToast(t.name + ' set');
+      };
+      g.appendChild(btn);
+    });
+    wrap.appendChild(g);
+  }
+
+  function renderShopMarkers(wrap, hint, bank){
+    hint.innerHTML = 'What a ruled-out square shows instead of ✕.<br>' +
+      '<b>' + collection.markers.length + '</b> of ' + MARKERS.length +
+      ' unlocked · locked cost <b>★' + STARS_PER_UNLOCK + '</b>';
+
+    var g = document.createElement('div');
+    g.className = 'shop-grid-3';
+    MARKERS.forEach(function(m){
+      var has = m.free || ownsMarker(m.id);
+      var btn = document.createElement('button');
+      var cls = 'marker-tile';
+      if(!has){ cls += ' locked'; if(bank >= STARS_PER_UNLOCK) cls += ' affordable'; }
+      else if(collection.marker === m.id) cls += ' chosen';
+      btn.className = cls;
+      btn.dataset.cost = STARS_PER_UNLOCK;
+      btn.title = m.name;
+      btn.innerHTML = '<span class="tile-inner"><svg viewBox="0 0 100 100" ' +
+        'xmlns="http://www.w3.org/2000/svg">' + markerArt(m.id, m.col) + '</svg></span>' +
+        '<span class="swatch-name">' + escapeHtml(m.name) + '</span>';
+      btn.onclick = function(){
+        if(!has){ confirmBuy(m, 'marker', null, null, m); return; }
+        collection.marker = m.id; save();
+        if(cloud) pushScores();
+        SFX.mark(); HAPTIC.mark();
+        renderShop();
+        showToast(m.name + ' set');
+      };
+      g.appendChild(btn);
+    });
+    wrap.appendChild(g);
+  }
+
+  function confirmBuy(item, kind, previewHTML, theme, marker){
+    var bank = availableStars();
+    if(bank < STARS_PER_UNLOCK){
+      var need = STARS_PER_UNLOCK - bank;
+      showToast('Need ' + need + ' more star' + (need===1?'':'s') + ' — clear levels to earn them');
+      HAPTIC.wrong();
+      return;
+    }
+    var art;
+    if(theme){
+      art = '<div class="swatch" style="width:110px;height:110px;margin:0 auto;background:' +
+            theme.board + ';padding:3px;gap:2px;box-shadow:none;">' + themeSwatch(theme) + '</div>';
+    } else if(marker){
+      art = '<div class="marker-tile" style="width:96px;height:96px;margin:0 auto;box-shadow:none;">' +
+            '<span class="tile-inner"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+            markerArt(marker.id, marker.col) + '</svg></span></div>';
+    } else {
+      art = '<div class="modal-pup">' + previewHTML + '</div>';
+    }
+
+    document.getElementById('modal').innerHTML =
+      art +
+      '<h2>Unlock ' + escapeHtml(item.name) + '?</h2>' +
+      '<p>Costs <b>★' + STARS_PER_UNLOCK + '</b>. You have <b>★' + bank + '</b>.</p>' +
+      '<button class="btn" id="buy-go">Unlock for ★' + STARS_PER_UNLOCK + '</button>' +
+      '<button class="btn secondary" id="buy-no">Not yet</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('buy-no').onclick = closeOverlay;
+    document.getElementById('buy-go').onclick = function(){
+      if(unlock(kind, item.id)){
+        if(kind === 'theme')  collection.theme  = item.id;
+        if(kind === 'marker') collection.marker = item.id;
+        save();
+        SFX.win(); HAPTIC.win();
+        closeOverlay(); renderShop();
+        showToast(item.name + ' unlocked!');
+      } else {
+        closeOverlay(); showToast('Not enough stars');
+      }
+    };
   }
 
   /* ================= LEADERBOARD ADMIN =================
@@ -4421,6 +5221,7 @@
   function renderBoard(){
     var n = puzzle.n, boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
+    var TH = activeTheme(), pal = TH.cols;
     /* Cells are pure colour and nothing else. Every attempt to make the cell
        draw its own edges failed for the same reason: two separate elements
        have to agree on where a boundary is, and browsers round them
@@ -4431,7 +5232,7 @@
         var cell = document.createElement('div');
         cell.className = 'cell';
         cell.dataset.r = r; cell.dataset.c = c;
-        cell.style.background = REGION_COLORS[puzzle.regionOf[r][c] % REGION_COLORS.length];
+        cell.style.background = pal[puzzle.regionOf[r][c] % pal.length];
         renderCellContent(cell, r, c);
         boardEl.appendChild(cell);
       }
@@ -4467,6 +5268,7 @@
     var boardEl = document.getElementById('board');
     if(!boardEl || !puzzle) return;
     var n = puzzle.n, cw = cellPx, size = cw * n;
+    var TH = activeTheme();
 
     var old = boardEl.querySelector('.lines');
     if(old) old.parentNode.removeChild(old);
@@ -4492,13 +5294,13 @@
     for(var r=1;r<n;r++){
       for(var c=0;c<n;c++){
         if(reg(r-1,c) === reg(r,c))
-          rect(c*cw, r*cw - THIN_W/2, cw, THIN_W, 'rgba(255,255,255,0.55)');
+          rect(c*cw, r*cw - THIN_W/2, cw, THIN_W, TH.thin);
       }
     }
     for(var c2=1;c2<n;c2++){
       for(var r2=0;r2<n;r2++){
         if(reg(r2,c2-1) === reg(r2,c2))
-          rect(c2*cw - THIN_W/2, r2*cw, THIN_W, cw, 'rgba(255,255,255,0.55)');
+          rect(c2*cw - THIN_W/2, r2*cw, THIN_W, cw, TH.thin);
       }
     }
 
@@ -4512,7 +5314,7 @@
         if(isB && start < 0) start = hc;
         if((!isB || hc === n) && start >= 0){
           rect(start*cw - half, hr*cw - half,
-               (hc - start)*cw + YARD_W, YARD_W, '#FFFFFF');
+               (hc - start)*cw + YARD_W, YARD_W, TH.line);
           start = -1;
         }
       }
@@ -4524,7 +5326,7 @@
         if(isV && st < 0) st = vr;
         if((!isV || vr === n) && st >= 0){
           rect(vc*cw - half, st*cw - half,
-               YARD_W, (vr - st)*cw + YARD_W, '#FFFFFF');
+               YARD_W, (vr - st)*cw + YARD_W, TH.line);
           st = -1;
         }
       }
@@ -4536,7 +5338,7 @@
   function renderCellContent(cell, r, c){
     var v = board[r][c];
     if(v===1) cell.innerHTML = coatFor(currentLevel, r, c);
-    else if(v===2) cell.innerHTML = X_MARK_HTML;
+    else if(v===2) cell.innerHTML = markerHTML();
     else cell.innerHTML = '';
   }
   function cellEl(r,c){ return document.getElementById('board').children[r*puzzle.n + c]; }
@@ -4738,6 +5540,10 @@
     /* border-box, so the width includes the frame on both sides */
     el.style.width  = (inner + FRAME*2) + 'px';
     el.style.height = (inner + FRAME*2) + 'px';
+
+    var TH = activeTheme();
+    el.style.borderColor = TH.line;
+    el.style.background  = TH.board;
 
     boardRect = el.getBoundingClientRect();
     cellSize = cellPx;
