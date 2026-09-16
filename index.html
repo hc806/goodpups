@@ -365,6 +365,56 @@
     opacity:.72; margin-top:2px; line-height:1.5; max-width:335px;
   }
 
+  .lb-pups{
+    display:flex; align-items:center; gap:-6px; flex-shrink:0; margin-left:6px;
+  }
+  .lb-pup{
+    width:30px; height:30px; display:block; flex-shrink:0;
+    border-radius:50%; background:#FFF6E9;
+    box-shadow:0 0 0 2px #FFFFFF, 0 1px 3px rgba(74,50,34,.22);
+  }
+  .lb-pup:not(:first-child){margin-left:-9px;}   /* overlap, like a team photo */
+  .lb-pup svg{width:100%; height:100%; display:block;}
+
+  .beat-line{
+    margin-top:10px; padding:9px 12px; border-radius:12px;
+    font-family:'Nunito',sans-serif; font-size:12.5px; font-weight:800;
+    background:#F1E7D6; color:var(--brown-dark); text-align:center;
+  }
+  .beat-line.won{
+    background:linear-gradient(180deg,#FFE9B8,#FFD489);
+    color:#7A5418; box-shadow:inset 0 0 0 2px var(--gold);
+  }
+
+  /* ---------- challenge ---------- */
+  .challenge-btn{
+    flex-shrink:0; margin-left:8px; border:none; cursor:pointer;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12px;
+    color:#fff; padding:7px 12px; border-radius:999px;
+    background:linear-gradient(180deg,#F2B457,var(--gold-dark));
+    box-shadow:0 3px 0 #B8860B;
+    -webkit-appearance:none; appearance:none;
+  }
+  .challenge-btn:active{transform:translateY(2px); box-shadow:0 1px 0 #B8860B;}
+  .held-tag{
+    flex-shrink:0; margin-left:8px; font-size:11px; font-weight:800;
+    font-family:'Nunito',sans-serif; color:var(--brown); opacity:.6;
+    min-width:44px; text-align:right;
+  }
+  .held-tag.locked{opacity:.35;}
+  #challenge-bar{
+    width:100%; margin-bottom:8px; padding:8px 12px; border-radius:14px;
+    background:linear-gradient(180deg,#FFF0D2,#FFE3AE);
+    border:2px solid var(--gold); color:var(--brown-dark);
+    font-family:'Nunito',sans-serif; font-size:12.5px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  #challenge-bar button{
+    background:none; border:none; color:var(--brown); opacity:.7;
+    font-size:11px; text-decoration:underline; cursor:pointer;
+    font-family:'Nunito',sans-serif; font-weight:700;
+  }
+
   /* ---------- first-run coaching ---------- */
   .coach{
     position:absolute; z-index:20; pointer-events:none;
@@ -914,6 +964,7 @@
       <div class="status-chip" id="hearts-display"></div>
       <div class="status-chip" id="dogs-display"></div>
     </div>
+    <div id="challenge-bar" style="display:none;"></div>
     <div class="board-wrap"><div class="board" id="board"></div><div class="coach" id="coach"></div></div>
     <div class="controls-row">
       <button class="ctrl-btn" id="btn-hint"><span id="hint-icon"></span>Clue<span class="hint-count" id="hint-count">5</span></button>
@@ -949,6 +1000,17 @@
 </script>
 
 <script type="module">
+  /* App Check proves a request came from your real app rather than a script
+     someone wrote against the API. Leave this blank and the game runs exactly
+     as before; fill it in after registering the site in
+     Firebase Console -> App Check -> Apps -> Web -> reCAPTCHA v3. */
+  const APPCHECK_SITE_KEY = "";
+
+  /* Set true on a dev machine to get a debug token printed in the console,
+     which you then register under App Check -> Apps -> Manage debug tokens.
+     Must be false in anything you ship. */
+  const APPCHECK_DEBUG = false;
+
   const FIREBASE_CONFIG = {
     apiKey:     "AIzaSyB8DrvARE3gUcAaj3mnrDsfOdcxpcA3rpw",
     authDomain: "goodpups-741d4.firebaseapp.com",
@@ -979,6 +1041,31 @@
 
     window.GP_STAGE = 'sdk loaded, signing in';
     const app  = initializeApp(FIREBASE_CONFIG);
+
+    /* App Check has to be initialised BEFORE any Firestore or Auth call, or
+       the first few requests go out unattested and get refused once
+       enforcement is switched on. */
+    if(APPCHECK_SITE_KEY){
+      try{
+        if(APPCHECK_DEBUG) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        const { initializeAppCheck, ReCaptchaV3Provider } =
+          await import(V + "firebase-app-check.js");
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(APPCHECK_SITE_KEY),
+          isTokenAutoRefreshEnabled: true
+        });
+        window.GP_APPCHECK = 'on';
+      }catch(e){
+        /* Never let attestation failure stop the game loading - an unattested
+           client still plays fine, it just cannot write once enforcement is
+           turned on. */
+        window.GP_APPCHECK = 'failed: ' + ((e && e.message) || 'unknown');
+        console.warn('GoodPups: App Check not started', e);
+      }
+    } else {
+      window.GP_APPCHECK = 'not configured';
+    }
+
     const auth = getAuth(app);
     const db   = getFirestore(app);
 
@@ -1118,6 +1205,16 @@
       /* The player's chosen name lives in Firestore, so a fresh device can
          recover the whole identity from the Google account alone - not just
          the scores. */
+      /* The admin list lives in Firestore so it can be changed in the console
+         without rebuilding and redeploying the app. Public to read - a user id
+         is not a secret, and it is already visible in the scores collection -
+         but writable only from the console. */
+      async adminList(){
+        const snap = await getDoc(doc(db, "config", "admins"));
+        if(!snap.exists()) return null;
+        const d = snap.data();
+        return Array.isArray(d.uids) ? d.uids : null;
+      },
       async myPlayer(){
         const snap = await getDoc(doc(db, "players", getAuth(app).currentUser.uid));
         return snap.exists() ? snap.data() : null;
@@ -1199,7 +1296,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260915.010547';
+  var GP_VERSION = '20260916.130819';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -2834,6 +2931,7 @@
       worn: col.worn || {},          /* breedId -> accessoryId */
       themes: Array.isArray(col.themes) ? col.themes.slice() : [],
       markers: Array.isArray(col.markers) ? col.markers.slice() : [],
+      adminSeen: col.adminSeen || 0,
       theme: col.theme || 'classic',
       marker: col.marker || 'x',
       spent: col.spent || 0          /* legacy field, no longer used */
@@ -3132,6 +3230,7 @@
     }
 
     if(cloud){
+      loadAdminList();
       if(justConnected) afterConnect();   /* just came back from the Google redirect */
       else adoptCloudIdentity();
     }
@@ -3292,6 +3391,21 @@
       var kennelChanged = mergeCollections(doc && doc.collection);
       var theirs = cloudLevelsOf(doc);
       var mine = localLevels();
+
+      /* an admin repair outranks the usual best-of-both merge */
+      var stamp = doc && doc.adminStamp;
+      if(stamp && stamp > (collection.adminSeen || 0)){
+        collection.adminSeen = stamp;
+        adoptLevels(theirs);
+        save();
+        refreshPlayButton();
+        renderLevelGridIfVisible();
+        lastSyncAt = Date.now();
+        syncing = false;
+        showToast('Your progress was updated');
+        return true;
+      }
+
       var merged = mergeLevels(mine, theirs);
 
       var before = summarise(mine), after = summarise(merged);
@@ -3696,7 +3810,11 @@
     if(!el) return;
     if(!cloudReady){ el.textContent = 'Connecting…'; return; }
     if(cloud){
-      el.textContent = 'Connected — you and your friends share one board.';
+      /* showing the attestation state saves guessing later: if writes start
+         failing after enforcement is turned on, this is the first place to look */
+      var ac = window.GP_APPCHECK;
+      el.textContent = 'Connected — you and your friends share one board.' +
+        (ac === 'on' ? ' Verified.' : '');
       return;
     }
     /* Show the real reason rather than a generic message - guessing at a
@@ -3818,7 +3936,8 @@
         themes: collection.themes.slice(),
         markers: collection.markers.slice(),
         theme: collection.theme,
-        marker: collection.marker
+        marker: collection.marker,
+        adminSeen: collection.adminSeen || 0
       }
     }).catch(function(){});
   }
@@ -3841,6 +3960,27 @@
     rows.sort(sortRows);
     return rows;
   }
+  /* The two dogs a player actually uses, drawn small beside their name.
+     Their team and outfits already travel in the score card, so this needs no
+     new data - and it turns a list of names into a list of people. */
+  function rowPups(row, keySuffix){
+    var col = row.col;
+    var team = (col && Array.isArray(col.team) && col.team.length)
+      ? col.team.slice(0, MAX_TEAM) : null;
+    if(!team){
+      /* older records predate the synced collection */
+      team = (row.id === (profile && profile.id)) ? collection.team : ['poodle-brown'];
+    }
+    var worn = (col && col.worn) || {};
+    var html = '<div class="lb-pups">';
+    team.forEach(function(id, i){
+      if(!BREED_BY_ID[id]) return;
+      html += '<span class="lb-pup">' +
+        dogSVG(id, worn[id] || null, 'lb' + keySuffix + i) + '</span>';
+    });
+    return html + '</div>';
+  }
+
   function fetchLeaderboard(){
     if(cloud){
       return cloud.topScores(80).then(function(docs){
@@ -3851,6 +3991,7 @@
           }
           return {id:d.id, name:d.name||'Pup', total:d.total||0, levels:d.count||0,
                   time:d.time||0, perfect:d.perfect||0, detail:detail,
+                  col: d.collection || null,
                   hidden: !!d.hidden || isHiddenLocally(d.id)};
         });
         /* hidden players are dropped for everyone except an admin, who needs
@@ -3876,7 +4017,7 @@
     rows.forEach(function(r){
       var key = normalizeName(r.name) + (r.hidden ? '::hidden' : '');
       var cur = byName[key];
-      if(!cur){ byName[key] = r; return; }
+      if(!cur){ r.ids = [r.id]; byName[key] = r; return; }
 
       /* merge the two records, best score per level */
       var detail = {};
@@ -3899,8 +4040,13 @@
       /* keep whichever id is mine, so my own row still highlights */
       var keepId = (profile && (cur.id === profile.id || r.id === profile.id))
         ? profile.id : cur.id;
-      byName[key] = { id:keepId, name:cur.name, total:total, levels:count,
+      /* Keep every id behind this row. An admin edit that writes to only one
+         of them looks like it did nothing: the untouched duplicates get merged
+         straight back on the next render, best-score-per-level. */
+      var allIds = (cur.ids || [cur.id]).concat(r.ids || [r.id]);
+      byName[key] = { id:keepId, ids:allIds, name:cur.name, total:total, levels:count,
                       time:time, perfect:perfect, detail:detail,
+                      col: cur.col || r.col,
                       hidden: cur.hidden || r.hidden };
     });
 
@@ -4061,6 +4207,7 @@
   document.getElementById('btn-back-howto').onclick    = function(){ showScreen('screen-title'); };
   document.getElementById('btn-menu').onclick = function(){
     clearCoach();
+    clearChallenge();
     snapshotRun(); refreshPlayButton(); showScreen('screen-title');
   };
   document.getElementById('btn-restart').onclick = function(){
@@ -4820,6 +4967,62 @@
     };
   }
 
+  /* ================= CHALLENGE =================
+     Opens the level with a target to beat. The target is only a banner and a
+     result message - the puzzle, the scoring and the lives are untouched, so a
+     challenge is the same level with something to aim at rather than a
+     different mode to balance. */
+  var challenge = null;
+
+  function startChallenge(lv, beatScore, who){
+    if(lv > maxUnlockedLevel()){
+      showToast('Reach level ' + lv + ' first');
+      HAPTIC.wrong();
+      return;
+    }
+    var mine = (progress[lv] && progress[lv].best) || 0;
+    document.getElementById('modal').innerHTML =
+      '<div class="emoji">⚔️</div>' +
+      '<h2>Beat ' + escapeHtml(who) + '?</h2>' +
+      '<div class="panel" style="text-align:left;font-size:13.5px;margin-bottom:16px;">' +
+        'Level <b>' + lv + '</b><br>' +
+        escapeHtml(who) + ' scored <b>' + beatScore + '</b>' +
+        (mine ? '<br>Your best is <b>' + mine + '</b> — you need <b>' +
+                (beatScore - mine + 1) + '</b> more'
+              : '<br>You have not played this level yet') +
+        '<br><br><span style="opacity:.75;">Same puzzle, same rules. Your best score ' +
+        'is kept either way, so a worse run costs you nothing.</span>' +
+      '</div>' +
+      '<button class="btn" id="ch-go">Play level ' + lv + '</button>' +
+      '<button class="btn secondary" id="ch-no">Not now</button>';
+    document.getElementById('overlay').classList.add('active');
+
+    document.getElementById('ch-no').onclick = closeOverlay;
+    document.getElementById('ch-go').onclick = function(){
+      challenge = { level:lv, score:beatScore, who:who };
+      closeOverlay();
+      startLevel(lv);
+      showScreen('screen-game');
+    };
+  }
+
+  function clearChallenge(){
+    challenge = null;
+    var b = document.getElementById('challenge-bar');
+    if(b) b.style.display = 'none';
+  }
+
+  function paintChallengeBar(){
+    var b = document.getElementById('challenge-bar');
+    if(!b) return;
+    if(!challenge || challenge.level !== currentLevel){ b.style.display = 'none'; return; }
+    b.style.display = 'block';
+    b.innerHTML = '⚔️ Beat <b>' + escapeHtml(challenge.who) + '</b> · ' + challenge.score +
+                  ' <button id="ch-drop">drop</button>';
+    var d = document.getElementById('ch-drop');
+    if(d) d.onclick = function(){ clearChallenge(); showToast('Challenge dropped'); };
+  }
+
   /* ================= LEADERBOARD ADMIN =================
      Eight taps on the title, then the same password. Admin mode lasts until
      you leave the screen. Every write here targets somebody else's records,
@@ -4837,13 +5040,15 @@
       lbTapAt = now; lbTaps++;
       if(lbTaps >= 8){
         lbTaps = 0;
-        askPassword('Leaderboard admin', function(){
+        adminGate('leaderboard', function(){
           lbAdmin = true;
           document.getElementById('lb-admin-bar').style.display = 'block';
           renderLeaderboard();
           showToast('Admin mode on');
         });
-      } else if(lbTaps >= 5){ showToast((8 - lbTaps) + ' more'); }
+      } else if(lbTaps >= 5 && (!adminIds().length || isAdminUser())){
+        showToast((8 - lbTaps) + ' more');
+      }
     });
   })();
 
@@ -4854,28 +5059,47 @@
     renderLeaderboard();
   }
 
-  /* one password prompt, reused by both admin entry points */
-  function askPassword(title, onOk){
+  /* Replaces the old password prompt. Either you are the admin account or you
+     are not - there is nothing to type. When no admin id is configured yet it
+     shows you yours, which is the only way to bootstrap the first one. */
+  function adminGate(what, onOk){
+    if(!adminIds().length){ showMyUid(true); return; }
+    if(isAdminUser()){ onOk(); return; }
+    showMyUid(false);
+  }
+
+  function showMyUid(needsSetup){
+    var id = myUid() || '(not connected)';
+    var linked = cloud && cloud.isGoogleLinked && cloud.isGoogleLinked();
     document.getElementById('modal').innerHTML =
-      '<div class="emoji">🔧</div>' +
-      '<h2>' + escapeHtml(title) + '</h2>' +
-      '<p>Enter the password.</p>' +
-      '<input id="pw-input" type="password" autocomplete="off" ' +
-        'style="width:100%;padding:13px 14px;font-size:16px;text-align:center;' +
-        'border-radius:14px;border:2.5px solid var(--cream-dark);background:#fff;' +
-        'color:var(--brown-dark);outline:none;margin-bottom:12px;">' +
-      '<button class="btn" id="pw-go">Unlock</button>' +
-      '<button class="btn secondary" id="pw-cancel">Cancel</button>';
+      '<div class="emoji">🔑</div>' +
+      '<h2>' + (needsSetup ? 'Set up admin' : 'Not an admin account') + '</h2>' +
+      '<div class="panel" style="text-align:left;font-size:13px;margin-bottom:14px;">' +
+        (needsSetup
+          ? 'No admin id is set yet. Either add it to <b>config/admins</b> in ' +
+            'the Firebase console (no redeploy needed), or paste it into ' +
+            '<b>ADMIN_UIDS</b> at the top of index.html. Add it to ' +
+            '<b>firestore.rules</b> either way — that is what actually grants ' +
+            'permission to edit other players.'
+          : 'This account cannot use the admin tools. Sign in with the admin ' +
+            'Google account and try again.') +
+        (linked ? '' : '<br><br><b>Connect Google first</b> — an anonymous id changes ' +
+                       'on every reinstall, so it is no use as an admin id.') +
+        '<br><br><span style="font-size:11px;word-break:break-all;opacity:.85;">' +
+        escapeHtml(id) + '</span>' +
+      '</div>' +
+      '<button class="btn" id="uid-copy">Copy my id</button>' +
+      '<button class="btn secondary" id="uid-close">Close</button>';
     document.getElementById('overlay').classList.add('active');
-    var inp = document.getElementById('pw-input');
-    function go(){
-      if(inp.value === ADMIN_PASS){ inp.value=''; closeOverlay(); onOk(); }
-      else { inp.value=''; HAPTIC.wrong(); showToast('Wrong password'); }
-    }
-    document.getElementById('pw-go').onclick = go;
-    inp.addEventListener('keydown', function(e){ if(e.key==='Enter') go(); });
-    document.getElementById('pw-cancel').onclick = closeOverlay;
-    setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 250);
+
+    document.getElementById('uid-copy').onclick = function(){
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(id).then(
+          function(){ showToast('Id copied'); },
+          function(){ showToast('Long-press the id to copy it'); });
+      } else { showToast('Long-press the id to copy it'); }
+    };
+    document.getElementById('uid-close').onclick = closeOverlay;
   }
 
   function lbRowTapped(row){
@@ -4961,8 +5185,17 @@
     var levels = buildLevels(lv, st);
     var total = 0, perfect = 0, count = 0, time = 0;
     for(var k in levels){ total += levels[k].s; time += levels[k].t; if(levels[k].p) perfect++; count++; }
+    /* The normal merge keeps the BEST score on every level. That is exactly
+       right when you are RAISING someone - which is the usual repair, handing
+       back progress lost in an update - so no special treatment is needed and
+       no rules change either.
+       Lowering is the awkward case: the player's own phone would push its
+       higher numbers straight back. Those writes carry a stamp that tells the
+       device to adopt rather than merge. */
+    var lowering = count < (row.levels || 0);
     var payload = { name: row.name, total: total, perfect: perfect,
                     count: count, time: time, levels: levels };
+    if(lowering) payload.adminStamp = Date.now();
 
     if(row.id === (profile && profile.id)){
       /* editing yourself - go through the normal local path too */
@@ -4977,9 +5210,37 @@
     if(!cloud || !cloud.adminSetScores){
       closeOverlay(); showToast('Not connected — cloud unchanged'); return;
     }
-    cloud.adminSetScores(row.id, payload).then(function(){
+    /* Write the new record to the primary id, then hide any duplicate records
+       for the same player so they stop feeding the merge. Nothing is deleted -
+       hidden records can be brought back. */
+    var others = (row.ids || [row.id]).filter(function(id){ return id !== row.id; });
+
+    function write(){
+      return cloud.adminSetScores(row.id, payload).catch(function(err){
+        var code = (err && err.code) || '';
+        /* 'adminStamp' may not be in the rules' allowed-fields list. Rather
+           than fail the whole edit, drop it and write again - the values still
+           land, they just merge normally instead of overriding. */
+        if(payload.adminStamp && code.indexOf('permission') !== -1){
+          delete payload.adminStamp;
+          return cloud.adminSetScores(row.id, payload).then(function(){
+            showToast('Saved — add "adminStamp" to your rules to make cuts stick');
+          });
+        }
+        throw err;
+      });
+    }
+
+    write().then(function(){
+      return Promise.all(others.map(function(id){
+        return cloud.adminSetHidden(id, true).catch(function(){});
+      }));
+    }).then(function(){
       closeOverlay(); renderLeaderboard();
-      SFX.win(); showToast(row.name + ' set to ' + lv + ' levels, ★' + st);
+      SFX.win();
+      showToast(row.name + ' set to ' + lv + ' levels, ★' + st +
+                (others.length ? ' (' + others.length + ' duplicate' +
+                 (others.length===1?'':'s') + ' hidden)' : ''));
     }, function(err){
       closeOverlay();
       showToast(adminError(err));
@@ -5019,7 +5280,14 @@
       closeOverlay(); showToast('Not connected — cloud unchanged'); return;
     }
     var oldKey = normalizeName(row.name), key = normalizeName(newName);
+    var extra = (row.ids || [row.id]).filter(function(id){ return id !== row.id; });
     cloud.adminSetName(row.id, newName, key, oldKey).then(function(){
+      /* duplicates carry the old name, so rename them too or they reappear
+         on the board under the name you just freed up */
+      return Promise.all(extra.map(function(id){
+        return cloud.adminSetScores(id, { name: newName }).catch(function(){});
+      }));
+    }).then(function(){
       if(row.id === (profile && profile.id)){
         profile.name = newName; profile.key = key; save(); refreshProfileUI();
       }
@@ -5049,8 +5317,11 @@
 
     if(!cloud || !cloud.adminSetHidden){ localOnly('not connected'); return; }
 
-    cloud.adminSetHidden(row.id, hide).then(function(){
-      setHiddenLocally(row.id, false);   /* the cloud flag is now the truth */
+    var every = row.ids || [row.id];
+    Promise.all(every.map(function(id){
+      return cloud.adminSetHidden(id, hide);
+    })).then(function(){
+      every.forEach(function(id){ setHiddenLocally(id, false); });
       closeOverlay(); renderLeaderboard();
       showToast(row.name + (hide ? ' hidden' : ' restored'));
     }, function(err){
@@ -5101,6 +5372,7 @@
                 row.levels + ' level' + (row.levels===1?'':'s') +
                 (row.perfect ? ' · ' + row.perfect + ' flawless ⭐' : '') + '</div>' +
             '</div>' +
+            rowPups(row, 't' + i) +
             '<div class="lb-score">' + row.total + '</div></div>';
         });
       } else {
@@ -5110,7 +5382,8 @@
             var e = row.detail[lv];
             if(!best[lv] || e.score > best[lv].score ||
               (e.score === best[lv].score && e.seconds < best[lv].seconds)){
-              best[lv] = {score:e.score, seconds:e.seconds, name:row.name, id:row.id};
+              best[lv] = {score:e.score, seconds:e.seconds, name:row.name,
+                          id:row.id, col:row.col};
             }
           }
         });
@@ -5118,16 +5391,43 @@
         if(!lvs.length){ body.innerHTML = '<div class="lb-empty">No level scores yet.</div>'; return; }
         lvs.forEach(function(lv){
           var e = best[lv];
-          html += '<div class="lb-row' + (e.id===myId?' me':'') + '">' +
+          var mine = (e.id === myId);
+          var unlocked = lv <= maxUnlockedLevel();
+          /* My own best needs no challenge button - I already hold it.
+             A level I have not reached yet cannot be opened either. */
+          var canChallenge = !mine && unlocked;
+          var myScore = (progress[lv] && progress[lv].best) || 0;
+
+          html += '<div class="lb-row' + (mine?' me':'') + '">' +
             '<div class="lb-rank">' + lv + '</div>' +
             '<div style="flex:1; min-width:0;">' +
               '<div class="lb-name">' + escapeHtml(e.name) + '</div>' +
-              '<div class="lb-meta">' + formatTime(e.seconds) + '</div>' +
+              '<div class="lb-meta">' + formatTime(e.seconds) +
+                (mine ? '' : (myScore ? ' · you ' + myScore : ' · not played')) +
+              '</div>' +
             '</div>' +
-            '<div class="lb-score">' + e.score + '</div></div>';
+            rowPups({ id:e.id, col:e.col }, 'p' + lv) +
+            '<div class="lb-score">' + e.score + '</div>' +
+            (canChallenge
+              ? '<button class="challenge-btn" data-lv="' + lv +
+                '" data-beat="' + e.score + '" data-who="' + escapeHtml(e.name) + '">Beat it</button>'
+              : (mine ? '<span class="held-tag">yours</span>'
+                      : '<span class="held-tag locked">🔒</span>')) +
+            '</div>';
         });
       }
       body.innerHTML = html;
+
+      body.querySelectorAll('.challenge-btn').forEach(function(btn){
+        btn.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          startChallenge(
+            parseInt(btn.getAttribute('data-lv'), 10),
+            parseInt(btn.getAttribute('data-beat'), 10),
+            btn.getAttribute('data-who')
+          );
+        });
+      });
 
       if(lbAdmin){
         var map = {};
@@ -5166,6 +5466,8 @@
     document.getElementById('level-pill').textContent = 'Level ' + lv;
     updateHearts(); renderBoard(); updateDogCounter(); updateHintUI();
     startTimer(resumed ? resumed.elapsed : 0);
+    if(challenge && challenge.level !== lv) clearChallenge();
+    paintChallengeBar();
     if(lv <= 2 && !coachDone()) setTimeout(function(){ startCoach(lv); }, 500);
     else clearCoach();
     if(resumed && (resumed.hearts < MAX_HEARTS || countPlaced() > 0)){
@@ -5678,11 +5980,9 @@
     lastTapKey = key; lastTapTime = now;
     if(board[r][c] === 1){
       /* A poodle can only ever land on a correct square - a wrong double tap
-         costs a life and never places one. So a placed poodle is always right,
-         and clearing it by tapping was just a way to lose work by accident. */
-      SFX.mark(); HAPTIC.mark();
-      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
-      showToast('That one is right where it belongs');
+         costs a life and never places one. So a placed poodle is always right
+         and simply stays put. No sound, no toast: a found dog is settled, and
+         saying so every time you brush the square is noise. */
       return;
     } else if(board[r][c] === 2){
       board[r][c] = 0; renderCellContent(el,r,c); SFX.unmark(); HAPTIC.unmark();
@@ -5871,12 +6171,24 @@
       if(firstEver){
         showNameSetup(function(){
           submitScore(currentLevel, result.score, elapsedSec, result.perfect);
-          showWin(stars, result, earnedHelp, wheelsOff);
+          var beat = null;
+        if(challenge && challenge.level === currentLevel){
+          beat = { who: challenge.who, target: challenge.score,
+                   won: result.score > challenge.score };
+          clearChallenge();
+        }
+        showWin(stars, result, earnedHelp, wheelsOff, beat);
         });
       } else {
         submitScore(currentLevel, result.score, elapsedSec, result.perfect);
         lastSyncAt = Date.now();   /* just pushed - no need to pull immediately */
-        showWin(stars, result, earnedHelp, wheelsOff);
+        var beat = null;
+        if(challenge && challenge.level === currentLevel){
+          beat = { who: challenge.who, target: challenge.score,
+                   won: result.score > challenge.score };
+          clearChallenge();
+        }
+        showWin(stars, result, earnedHelp, wheelsOff, beat);
       }
     }, 380);
   }
@@ -6100,7 +6412,50 @@
      Eight taps on the Settings title, then a password. This exists to put
      back progress that was lost to the duplicate-account bug, so it writes
      straight to the signed-in account rather than only this device. */
-  var ADMIN_PASS = 'chanFam';
+  /* ================= ADMIN ACCESS =================
+     Gated on Firebase user id, not a password. The old password sat in plain
+     source where anybody could read it, and it never protected anything real:
+     Firestore checks the signed-in uid, so the password only hid a screen.
+     An id is not a secret either - it is already public in the scores
+     collection - but here it is checked against the account you are actually
+     signed in as, which is the thing that matters.
+
+     Leave the list empty and eight taps simply show you your own id so you can
+     paste it in. */
+  var ADMIN_UIDS = [
+    // 'paste-your-uid-here'
+  ];
+
+  function myUid(){ return (cloud && cloud.uid) || (profile && profile.id) || null; }
+
+  /* Two sources, same list: anything hardcoded below, plus whatever the
+     config/admins document says. Either alone is enough, so the app still
+     works if the document is missing and the document alone is enough if the
+     hardcoded list is empty. */
+  var CLOUD_ADMINS = null;
+
+  function adminIds(){
+    var out = ADMIN_UIDS.slice();
+    (CLOUD_ADMINS || []).forEach(function(id){
+      if(out.indexOf(id) === -1) out.push(id);
+    });
+    return out;
+  }
+
+  function isAdminUser(){
+    var ids = adminIds();
+    if(!ids.length) return false;
+    var id = myUid();
+    return !!id && ids.indexOf(id) !== -1;
+  }
+
+  function loadAdminList(){
+    if(!cloud || !cloud.adminList) return;
+    cloud.adminList().then(function(list){
+      if(list) CLOUD_ADMINS = list;
+    }, function(){ /* missing or unreadable: fall back to the hardcoded list */ });
+  }
+
   var titleTaps = 0, titleTapAt = 0;
 
   (function wireSecretTap(){
@@ -6115,7 +6470,7 @@
       if(titleTaps >= 8){
         titleTaps = 0;
         askAdminPassword();
-      } else if(titleTaps >= 5){
+      } else if(titleTaps >= 5 && (!adminIds().length || isAdminUser())){
         showToast((8 - titleTaps) + ' more');
       }
     });
@@ -6125,7 +6480,7 @@
      writes directly to a player's account, so it should never be one tap away
      just because it was opened earlier in the session. */
   function askAdminPassword(){
-    askPassword('Repair tools', openAdmin);
+    adminGate('repair', openAdmin);
   }
 
   function openAdmin(){
@@ -6143,7 +6498,7 @@
       '<br>' + (cloud && cloud.isGoogleLinked && cloud.isGoogleLinked()
         ? 'Google connected — changes go to the cloud'
         : 'Not connected to Google — changes stay on this device') +
-      '<br><br><b>Your admin id</b> (paste into firestore.rules to edit other players):' +
+      '<br><br><b>Your id</b> (goes in ADMIN_UIDS and firestore.rules):' +
       '<br><span id="admin-uid" style="font-size:11px;word-break:break-all;opacity:.8;">' +
       escapeHtml(uid) + '</span>' +
       '<br><button id="btn-copy-uid" class="ctrl-btn" style="max-width:120px;margin-top:8px;">Copy id</button>';
@@ -6251,7 +6606,7 @@
     document.getElementById('btn-close-rules').onclick = closeOverlay;
   }
 
-  function showWin(stars, result, earnedHelp, wheelsOff){
+  function showWin(stars, result, earnedHelp, wheelsOff, beat){
     var msg = nextWinMessage();
     var isLast = currentLevel >= TOTAL_LEVELS;
     var entry = progress[currentLevel] || {};
