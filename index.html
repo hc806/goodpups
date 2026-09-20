@@ -1348,7 +1348,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260918.215619';
+  var GP_VERSION = '20260920.002303';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -5126,24 +5126,49 @@
      different mode to balance. */
   var challenge = null;
 
-  function startChallenge(lv, beatScore, who){
+  /* Score has a ceiling, so "beat 1000 by scoring 1001" is a target that can
+     never exist - that was the confusing wording in the screenshot. Once the
+     record already sits at the cap, the only thing left to chase is TIME:
+     same puzzle, same score, but faster. Below the cap, score is still the
+     honest target, because a slower flawless run and a faster near-miss
+     shouldn't be treated as equivalent. */
+  function startChallenge(lv, beatScore, who, beatSeconds){
     if(lv > maxUnlockedLevel()){
       showToast('Reach level ' + lv + ' first');
       HAPTIC.wrong();
       return;
     }
     var mine = (progress[lv] && progress[lv].best) || 0;
+    var myTime = (progress[lv] && progress[lv].bestTime) || 0;
+    var byTime = (beatScore >= SCORE_MAX);
+
+    var body;
+    if(byTime){
+      body = 'Level <b>' + lv + '</b><br>' +
+        escapeHtml(who) + ' scored a perfect <b>' + beatScore + '</b> in <b>' +
+        formatTime(beatSeconds) + '</b>' +
+        (mine >= SCORE_MAX
+          ? (myTime && myTime < beatSeconds
+             ? '<br>You are already faster, at <b>' + formatTime(myTime) + '</b>'
+             : '<br>Your best is <b>' + formatTime(myTime) + '</b> — beat that time')
+          : '<br>Score stays capped at ' + SCORE_MAX + ' — the only thing left to chase is time') +
+        '<br><br><span style="opacity:.75;">Same puzzle, same rules. A perfect score with a ' +
+        'faster time wins this one; your saved best is kept either way.</span>';
+    } else {
+      body = 'Level <b>' + lv + '</b><br>' +
+        escapeHtml(who) + ' scored <b>' + beatScore + '</b>' +
+        (mine ? '<br>Your best is <b>' + mine + '</b> — beat it by score, ' +
+                'or by time if you both hit ' + SCORE_MAX
+              : '<br>You have not played this level yet') +
+        '<br><br><span style="opacity:.75;">Same puzzle, same rules. Your best score ' +
+        'is kept either way, so a worse run costs you nothing.</span>';
+    }
+
     document.getElementById('modal').innerHTML =
       '<div class="emoji">⚔️</div>' +
       '<h2>Beat ' + escapeHtml(who) + '?</h2>' +
       '<div class="panel" style="text-align:left;font-size:13.5px;margin-bottom:16px;">' +
-        'Level <b>' + lv + '</b><br>' +
-        escapeHtml(who) + ' scored <b>' + beatScore + '</b>' +
-        (mine ? '<br>Your best is <b>' + mine + '</b> — you need <b>' +
-                (beatScore - mine + 1) + '</b> more'
-              : '<br>You have not played this level yet') +
-        '<br><br><span style="opacity:.75;">Same puzzle, same rules. Your best score ' +
-        'is kept either way, so a worse run costs you nothing.</span>' +
+        body +
       '</div>' +
       '<button class="btn" id="ch-go">Play level ' + lv + '</button>' +
       '<button class="btn secondary" id="ch-no">Not now</button>';
@@ -5151,7 +5176,7 @@
 
     document.getElementById('ch-no').onclick = closeOverlay;
     document.getElementById('ch-go').onclick = function(){
-      challenge = { level:lv, score:beatScore, who:who };
+      challenge = { level:lv, score:beatScore, seconds:beatSeconds, who:who, byTime:byTime };
       closeOverlay();
       startLevel(lv);
       showScreen('screen-game');
@@ -5169,7 +5194,10 @@
     if(!b) return;
     if(!challenge || challenge.level !== currentLevel){ b.style.display = 'none'; return; }
     b.style.display = 'block';
-    b.innerHTML = '⚔️ Beat <b>' + escapeHtml(challenge.who) + '</b> · ' + challenge.score +
+    b.innerHTML = '⚔️ Beat <b>' + escapeHtml(challenge.who) + '</b> · ' +
+                  (challenge.byTime
+                    ? SCORE_MAX + ' in under ' + formatTime(challenge.seconds)
+                    : challenge.score) +
                   ' <button id="ch-drop">drop</button>';
     var d = document.getElementById('ch-drop');
     if(d) d.onclick = function(){ clearChallenge(); showToast('Challenge dropped'); };
@@ -5590,7 +5618,8 @@
             '<div class="lb-score">' + e.score + '</div>' +
             (canChallenge
               ? '<button class="challenge-btn" data-lv="' + lv +
-                '" data-beat="' + e.score + '" data-who="' + escapeHtml(e.name) + '">Beat it</button>'
+                '" data-beat="' + e.score + '" data-secs="' + (e.seconds||0) +
+                '" data-who="' + escapeHtml(e.name) + '">Beat it</button>'
               : (mine ? '<span class="held-tag">yours</span>'
                       : '<span class="held-tag locked">🔒</span>')) +
             '</div>';
@@ -5604,7 +5633,8 @@
           startChallenge(
             parseInt(btn.getAttribute('data-lv'), 10),
             parseInt(btn.getAttribute('data-beat'), 10),
-            btn.getAttribute('data-who')
+            btn.getAttribute('data-who'),
+            parseInt(btn.getAttribute('data-secs'), 10) || 0
           );
         });
       });
@@ -6354,23 +6384,13 @@
       if(firstEver){
         showNameSetup(function(){
           submitScore(currentLevel, result.score, elapsedSec, result.perfect);
-          var beat = null;
-        if(challenge && challenge.level === currentLevel){
-          beat = { who: challenge.who, target: challenge.score,
-                   won: result.score > challenge.score };
-          clearChallenge();
-        }
+          var beat = judgeChallenge(result, elapsedSec);
         showWin(stars, result, earnedHelp, wheelsOff, beat);
         });
       } else {
         submitScore(currentLevel, result.score, elapsedSec, result.perfect);
         lastSyncAt = Date.now();   /* just pushed - no need to pull immediately */
-        var beat = null;
-        if(challenge && challenge.level === currentLevel){
-          beat = { who: challenge.who, target: challenge.score,
-                   won: result.score > challenge.score };
-          clearChallenge();
-        }
+        var beat = judgeChallenge(result, elapsedSec);
         showWin(stars, result, earnedHelp, wheelsOff, beat);
       }
     }, 380);
@@ -6789,6 +6809,25 @@
     document.getElementById('btn-close-rules').onclick = closeOverlay;
   }
 
+  /* One place decides who won a challenge, used by both the normal and the
+     first-ever-level win paths so they cannot disagree with each other or
+     with the dialog that set the challenge up. */
+  function judgeChallenge(result, elapsed){
+    if(!challenge || challenge.level !== currentLevel) return null;
+    var won;
+    if(challenge.byTime){
+      /* only a perfect run can even be in the running once score is capped */
+      won = (result.score >= SCORE_MAX) && elapsed < challenge.seconds;
+    } else {
+      won = result.score > challenge.score;
+    }
+    var beat = { who: challenge.who, target: challenge.score,
+                 targetSeconds: challenge.seconds, byTime: challenge.byTime,
+                 mySeconds: elapsed, won: won };
+    clearChallenge();
+    return beat;
+  }
+
   function showWin(stars, result, earnedHelp, wheelsOff, beat){
     var msg = nextWinMessage();
     var isLast = currentLevel >= TOTAL_LEVELS;
@@ -6808,6 +6847,27 @@
     rows += '<div style="opacity:.62; font-size:11.5px; padding-top:2px;"><span>Solved in ' +
             formatTime(elapsedSec) + '</span><span>time doesn\'t affect score</span></div>';
 
+    /* Three distinct outcomes when the target is a time, not a score - each
+       needs its own sentence, so this stays as explicit branches rather than
+       one clever expression. */
+    var beatLine = '';
+    if(beat && beat.byTime){
+      if(beat.won){
+        beatLine = '⚔️ Beat ' + escapeHtml(beat.who) + '! Both perfect, but you were faster — ' +
+                   formatTime(beat.mySeconds) + ' vs ' + formatTime(beat.targetSeconds);
+      } else if(result.score >= SCORE_MAX){
+        beatLine = '⚔️ Perfect score, but ' + escapeHtml(beat.who) + ' was faster — ' +
+                   formatTime(beat.targetSeconds) + ' vs your ' + formatTime(beat.mySeconds);
+      } else {
+        beatLine = '⚔️ Score ' + SCORE_MAX + ' AND a time under ' + formatTime(beat.targetSeconds) +
+                   ' beats ' + escapeHtml(beat.who) + ' — this run scored ' + result.score;
+      }
+    } else if(beat){
+      beatLine = beat.won
+        ? '⚔️ Beat ' + escapeHtml(beat.who) + '! ' + result.score + ' vs ' + beat.target
+        : '⚔️ ' + escapeHtml(beat.who) + ' still leads — ' + beat.target + ' to your ' + result.score;
+    }
+
     document.getElementById('modal').innerHTML =
       '<div class="modal-pup">' + dogSVG(collection.team[stars===3 ? (collection.team.length>1?1:0) : 0], null, 'w1') + '</div>' +
       '<h2>' + msg.title + '</h2>' +
@@ -6815,6 +6875,7 @@
       (result.perfect ? '<div style="font-size:13px;font-weight:800;color:#4F8F5F;margin-bottom:4px;">Flawless run!</div>' :
         (isNewBest ? '<div style="font-size:13px;font-weight:800;color:var(--gold-dark);margin-bottom:4px;">New personal best</div>' : '')) +
       '<div class="stars-big">' + new Array(stars+1).join('★') + new Array(MAX_HEARTS-stars+1).join('☆') + '</div>' +
+      (beatLine ? '<div class="beat-line' + (beat && beat.won ? ' won' : '') + '">' + beatLine + '</div>' : '') +
       '<div class="score-breakdown">' + rows + '</div>' +
       ((earnedHelp && earnedHelp.length) ?
         '<p style="color:var(--gold-dark);font-weight:800;">' +
