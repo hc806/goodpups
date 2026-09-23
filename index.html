@@ -942,13 +942,13 @@
         <div class="setting-desc" id="admin-who">—</div>
         <div style="margin-top:14px;">
           <label style="font-size:13px;font-weight:800;font-family:'Baloo 2',sans-serif;">Levels completed</label>
-          <input id="admin-levels" type="number" min="0" max="300" inputmode="numeric"
+          <input id="admin-levels" type="number" min="0" max="400" inputmode="numeric"
             style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;
                    border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">
         </div>
         <div style="margin-top:12px;">
           <label style="font-size:13px;font-weight:800;font-family:'Baloo 2',sans-serif;">Stars earned</label>
-          <input id="admin-stars" type="number" min="0" max="900" inputmode="numeric"
+          <input id="admin-stars" type="number" min="0" max="1200" inputmode="numeric"
             style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;
                    border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">
           <div class="setting-desc" id="admin-star-note" style="margin-top:5px;"></div>
@@ -1348,7 +1348,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20260920.002303';
+  var GP_VERSION = '20260923.235105';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -5329,7 +5329,7 @@
         'style="width:100%;padding:12px;margin:5px 0 10px;font-size:16px;border-radius:12px;' +
         'border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">' +
         '<label style="font-size:13px;font-weight:800;font-family:\'Baloo 2\',sans-serif;">Stars</label>' +
-        '<input id="ep-st" type="number" min="0" max="900" inputmode="numeric" value="' + s.stars + '" ' +
+        '<input id="ep-st" type="number" min="0" max="' + (TOTAL_LEVELS*3) + '" inputmode="numeric" value="' + s.stars + '" ' +
         'style="width:100%;padding:12px;margin-top:5px;font-size:16px;border-radius:12px;' +
         'border:2.5px solid var(--cream-dark);background:#fff;color:var(--brown-dark);outline:none;">' +
       '</div>' +
@@ -6693,8 +6693,16 @@
 
   function readAdminValues(){
     var s = summarise(localLevels());
-    document.getElementById('admin-levels').value = s.count;
-    document.getElementById('admin-stars').value = s.stars;
+    var lvIn = document.getElementById('admin-levels');
+    var stIn = document.getElementById('admin-stars');
+    /* set from TOTAL_LEVELS every time the panel opens, so this can never go
+       stale again the way the hardcoded 300/900 just did after the 400-level
+       update - that mismatch was silently capping what an admin could grant
+       back to a player, on top of the separate Firestore rules cap. */
+    lvIn.max = TOTAL_LEVELS;
+    stIn.max = TOTAL_LEVELS * 3;
+    lvIn.value = s.count;
+    stIn.value = s.stars;
     var uid = (cloud && cloud.uid) || (profile && profile.id) || '—';
     document.getElementById('admin-who').innerHTML =
       (profile && profile.name ? 'Account: <b>' + escapeHtml(profile.name) + '</b>' : 'No player name set') +
