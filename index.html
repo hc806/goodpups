@@ -937,11 +937,35 @@
       radial-gradient(ellipse at 78% 80%, rgba(255,255,255,.30) 0%, transparent 56%);
   }
   .cell.fog-lift{animation:fogLift .9s ease-out;}
-  @keyframes fogLift{0%{filter:brightness(1.8) saturate(.5);} 100%{filter:none;}}
+  @keyframes fogLift{0%{filter:brightness(1.25) saturate(.8);} 100%{filter:none;}}
   .fog-ico{width:18px; height:18px; display:inline-block; vertical-align:-4px; margin-right:6px;}
   .fog-intro-art{display:flex; justify-content:center; margin-bottom:4px;}
   .fog-intro-art .fog-ico{width:64px; height:64px; margin:0; filter:drop-shadow(0 3px 4px rgba(60,70,90,.3));}
   .level-tile.fogtile{background:linear-gradient(180deg,#EEF1F6,#D9DFE9); color:#3F4A5E;}
+
+  .fog-demo{
+    position:relative; width:200px; margin:6px auto 8px; display:grid;
+    grid-template-columns:repeat(5,1fr); gap:0; border:4px solid #fff; border-radius:12px;
+    overflow:hidden; box-shadow:0 3px 10px rgba(80,50,20,.18); background:#fff;
+  }
+  .fd-cell{aspect-ratio:1/1; position:relative; transition:background-color .7s ease; border:.5px solid rgba(255,255,255,.55);}
+  .fd-cell.fog::before{
+    content:''; position:absolute; inset:0;
+    background:radial-gradient(ellipse at 26% 28%, rgba(255,255,255,.55) 0%, transparent 62%),
+               radial-gradient(ellipse at 78% 80%, rgba(255,255,255,.30) 0%, transparent 56%);
+  }
+  .fd-cell.fog-lift{animation:fogLift .9s ease-out;}
+  .fd-dog{position:absolute; opacity:0; transform:scale(.4); transition:opacity .25s, transform .35s cubic-bezier(.3,1.7,.5,1); pointer-events:none;}
+  .fd-dog.show{opacity:1; transform:scale(1);}
+  .fd-dog svg{width:100%; height:100%; display:block;}
+  .fd-hand{position:absolute; font-size:20px; line-height:1; opacity:0; pointer-events:none; transform:translate(-30%,-10%);}
+  .fd-hand.tap{opacity:1; animation:fdTap .75s ease-in-out infinite;}
+  @keyframes fdTap{0%,100%{transform:translate(-30%,-10%) scale(1);} 50%{transform:translate(-30%,-2%) scale(.86);}}
+  .fd-cap{min-height:42px; margin:4px 4px 6px; font-size:14px; line-height:1.35; color:var(--brown-dark);}
+  .fd-dots{display:flex; justify-content:center; gap:6px; margin-bottom:8px;}
+  .fd-dots i{width:7px; height:7px; border-radius:50%; background:var(--cream-dark, #E9D9BD); transition:background .3s, transform .3s;}
+  .fd-dots i.on{background:#E0A24A; transform:scale(1.25);}
+  .fog-notes ul{margin:0; font-size:13px;}
 </style>
 </head>
 <body>
@@ -1538,7 +1562,7 @@
      sortable as plain text, unique to the second, and readable at a glance -
      you can tell which build someone is on without looking anything up.
      Update this line every time a new index.html is produced. */
-  var GP_VERSION = '20261017.021132';
+  var GP_VERSION = '20261017.023101';
 
   function versionPretty(v){
     v = v || GP_VERSION;
@@ -7594,11 +7618,14 @@
       '</ul>' +
       (fogOn() ? '<br><b>Foggy Yard</b><ul>' +
         '<li>Grey squares are yards hidden in the mist.</li>' +
-        '<li>A placed poodle lights up the yards touching it.</li></ul>' : '') +
+        '<li>A placed poodle lights up the yards touching it.</li></ul>' +
+        '<button class="btn secondary" id="btn-fog-replay" style="margin-top:8px;">Show me the fog demo</button>' : '') +
       '<br>Every puzzle is solvable by reasoning alone — you never need to guess.</div>' +
       '<button class="btn" id="btn-close-rules">Got it</button>';
     document.getElementById('overlay').classList.add('active');
     document.getElementById('btn-close-rules').onclick = closeOverlay;
+    var fr = document.getElementById('btn-fog-replay');
+    if(fr) fr.onclick = showFogIntro;
   }
 
   /* One place decides who won a challenge, used by both the normal and the
@@ -8379,21 +8406,85 @@
     try{ localStorage.setItem(FOG_INTRO_KEY, '1'); }catch(e){}
     setTimeout(showFogIntro, 450);
   }
+  /* Animated mini-board: mist -> place a poodle -> nearby yards light up. */
+  var fogDemoTimer = null;
+  function stopFogDemo(){ if(fogDemoTimer){ clearTimeout(fogDemoTimer); fogDemoTimer = null; } }
+  function fogDemoHTML(){
+    var TH = activeTheme(), pal = TH.cols;
+    /* five yards on a 5x5 board: A B C D E */
+    var map = [0,0,1,1,1,  0,2,2,1,3,  0,2,2,3,3,  4,4,2,3,3,  4,4,4,4,3];
+    var html = '<div class="fog-demo" id="fog-demo">';
+    for(var p=0;p<25;p++){
+      html += '<div class="fd-cell" data-y="' + map[p] + '" data-p="' + p + '" data-c="' + pal[map[p] % pal.length] + '"></div>';
+    }
+    var pup = dogSVG((collection.team && collection.team[0]) || 'poodle-brown', null, 'fogdemo');
+    html += '<div class="fd-dog" id="fd-dog">' + pup + '</div><div class="fd-hand" id="fd-hand">👆</div></div>';
+    html += '<div class="fd-cap" id="fd-cap"></div>';
+    html += '<div class="fd-dots"><i></i><i></i><i></i></div>';
+    return html;
+  }
+  function runFogDemo(){
+    stopFogDemo();
+    var root = document.getElementById('fog-demo'); if(!root) return;
+    var cells = root.querySelectorAll('.fd-cell'), dog = document.getElementById('fd-dog'),
+        hand = document.getElementById('fd-hand'), cap = document.getElementById('fd-cap'),
+        dots = document.querySelectorAll('.fd-dots i');
+    var TH = activeTheme(), mist = fogColor(TH);
+    var DOG = 8;                         /* row 1, column 3 */
+    var caps = ['<b>1.</b> Mist hides some of the yards.',
+                '<b>2.</b> Place a poodle on a square you have worked out.',
+                '<b>3.</b> It sniffs out the yards beside it, and the mist lifts.'];
+    function paint(lit){
+      cells.forEach(function(c){
+        var y = +c.getAttribute('data-y'), on = lit.indexOf(y) !== -1;
+        c.style.background = on ? c.getAttribute('data-c') : mist;
+        c.classList.toggle('fog', !on);
+      });
+    }
+    function setStep(i){
+      cap.innerHTML = caps[i];
+      dots.forEach(function(d, k){ d.classList.toggle('on', k === i); });
+    }
+    function seq(step){
+      if(!document.getElementById('fog-demo')) return;      /* modal closed */
+      if(step === 0){
+        dog.classList.remove('show'); hand.classList.remove('tap');
+        paint([0,4]); setStep(0);
+        fogDemoTimer = setTimeout(function(){ seq(1); }, 2200);
+      } else if(step === 1){
+        setStep(1);
+        var cell = cells[DOG];
+        dog.style.left = cell.offsetLeft + 'px'; dog.style.top = cell.offsetTop + 'px';
+        dog.style.width = cell.offsetWidth + 'px'; dog.style.height = cell.offsetHeight + 'px';
+        hand.style.left = (cell.offsetLeft + cell.offsetWidth*0.5) + 'px';
+        hand.style.top = (cell.offsetTop + cell.offsetHeight*0.55) + 'px';
+        hand.classList.add('tap');
+        fogDemoTimer = setTimeout(function(){ dog.classList.add('show'); hand.classList.remove('tap'); seq(2); }, 1500);
+      } else {
+        setStep(2);
+        paint([0,4,1,2,3]);
+        cells.forEach(function(c){ var y=+c.getAttribute('data-y'); if(y===1||y===2||y===3){ c.classList.remove('fog-lift'); void c.offsetWidth; c.classList.add('fog-lift'); } });
+        fogDemoTimer = setTimeout(function(){ seq(0); }, 3600);
+      }
+    }
+    seq(0);
+  }
+
   function showFogIntro(){
     var m = document.getElementById('modal');
     m.innerHTML =
-      '<div class="fog-intro-art">' + FOG_ICON + '</div>' +
       '<h2>New: Foggy Yard</h2>' +
-      '<p>Levels <b>' + FOG_FIRST + '–' + TOTAL_LEVELS + '</b> bring a new twist. Mist hides the colour of some yards.</p>' +
-      '<div class="panel"><ul>' +
+      '<p style="margin-bottom:8px;">Levels <b>' + FOG_FIRST + '–' + TOTAL_LEVELS + '</b> bring a new twist.</p>' +
+      fogDemoHTML() +
+      '<div class="panel fog-notes"><ul>' +
         '<li>Grey squares are yards hidden in the mist.</li>' +
-        '<li>Place a poodle and it sniffs out the yards beside it, lifting the mist.</li>' +
-        '<li>Every level can still be solved by reasoning alone.</li>' +
+        '<li>You can still solve every level by reasoning alone.</li>' +
         '<li>Stars, scores and the leaderboard work exactly as before.</li>' +
       '</ul></div>' +
       '<button class="btn" id="btn-fog-go">Into the fog</button>';
     document.getElementById('overlay').classList.add('active');
-    document.getElementById('btn-fog-go').onclick = closeOverlay;
+    document.getElementById('btn-fog-go').onclick = function(){ stopFogDemo(); closeOverlay(); };
+    runFogDemo();
   }
 
   /* ================= INIT ================= */
